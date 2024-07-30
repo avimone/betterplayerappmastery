@@ -14,9 +14,14 @@ class _HlsTracksPageState extends State<HlsTracksPage> {
   void initState() {
     BetterPlayerConfiguration betterPlayerConfiguration =
         BetterPlayerConfiguration(
-      aspectRatio: 16 / 9,
-      fit: BoxFit.contain,
-    );
+            aspectRatio: 16 / 9,
+            fit: BoxFit.contain,
+            controlsConfiguration: BetterPlayerControlsConfiguration(
+              overflowModalColor: Colors.black,
+              overflowModalTextColor: Colors.white,
+              overflowMenuIconsColor: Colors.white,
+              loadingColor: Colors.amber,
+            ));
     BetterPlayerDataSource dataSource = BetterPlayerDataSource(
       BetterPlayerDataSourceType.network,
       "https://player.vimeo.com/external/955785077.m3u8?s=6b46c3d85e93f772b1c1d155cca22af1b0512868&oauth2_token_id=1698974288",

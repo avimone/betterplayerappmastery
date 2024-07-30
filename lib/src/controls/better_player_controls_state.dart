@@ -111,7 +111,7 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget>
                 Navigator.of(context).pop();
                 _showSubtitlesSelectionWidget();
               }),
-            if (betterPlayerControlsConfiguration.enableQualities)
+            /*          if (betterPlayerControlsConfiguration.enableQualities)
               _buildMoreOptionsListRow(
                   betterPlayerControlsConfiguration.qualitiesIcon,
                   translations.overflowMenuQuality, () {
@@ -124,7 +124,7 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget>
                   translations.overflowMenuAudioTracks, () {
                 Navigator.of(context).pop();
                 _showAudioTracksSelectionWidget();
-              }),
+              }), */
             if (betterPlayerControlsConfiguration
                 .overflowMenuCustomItems.isNotEmpty)
               ...betterPlayerControlsConfiguration.overflowMenuCustomItems.map(
