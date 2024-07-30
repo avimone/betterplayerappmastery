@@ -204,6 +204,8 @@ class _BetterPlayerMaterialControlsState
                           controlsNotVisible, _onPlayerHide)
                     else
                       const SizedBox(),
+                    _buildAudioTracksButton(),
+                    _buildVideoTracksButton(),
                     _buildMoreButton(),
                   ],
                 ),
@@ -223,6 +225,36 @@ class _BetterPlayerMaterialControlsState
         padding: const EdgeInsets.all(8),
         child: Icon(
           betterPlayerControlsConfiguration.pipMenuIcon,
+          color: betterPlayerControlsConfiguration.iconsColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAudioTracksButton() {
+    return BetterPlayerMaterialClickableWidget(
+      onTap: () {
+        onAudioTracksClicked();
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Icon(
+          betterPlayerControlsConfiguration.audioTracksIcon,
+          color: betterPlayerControlsConfiguration.iconsColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoTracksButton() {
+    return BetterPlayerMaterialClickableWidget(
+      onTap: () {
+        onVideoTracksClicked();
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Icon(
+          betterPlayerControlsConfiguration.qualitiesIcon,
           color: betterPlayerControlsConfiguration.iconsColor,
         ),
       ),
