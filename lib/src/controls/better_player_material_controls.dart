@@ -204,7 +204,7 @@ class _BetterPlayerMaterialControlsState
                           controlsNotVisible, _onPlayerHide)
                     else
                       const SizedBox(),
-                    _buildAudioTracksButton(),
+                    // _buildAudioTracksButton(),
                     _buildVideoTracksButton(),
                     _buildMoreButton(),
                   ],
@@ -457,7 +457,7 @@ class _BetterPlayerMaterialControlsState
     return _buildHitAreaClickableButton(
       icon: Icon(
         _controlsConfiguration.skipBackIcon,
-        size: 24,
+        size: _betterPlayerController!.isFullScreen ? 57 : 47,
         color: _controlsConfiguration.iconsColor,
       ),
       onClicked: skipBack,
@@ -468,7 +468,7 @@ class _BetterPlayerMaterialControlsState
     return _buildHitAreaClickableButton(
       icon: Icon(
         _controlsConfiguration.skipForwardIcon,
-        size: 24,
+        size: _betterPlayerController!.isFullScreen ? 57 : 47,
         color: _controlsConfiguration.iconsColor,
       ),
       onClicked: skipForward,
@@ -481,14 +481,14 @@ class _BetterPlayerMaterialControlsState
       icon: isFinished
           ? Icon(
               Icons.replay,
-              size: 42,
+              size: 45,
               color: _controlsConfiguration.iconsColor,
             )
           : Icon(
               controller.value.isPlaying
                   ? _controlsConfiguration.pauseIcon
                   : _controlsConfiguration.playIcon,
-              size: 42,
+              size: _betterPlayerController!.isFullScreen ? 54 : 45,
               color: _controlsConfiguration.iconsColor,
             ),
       onClicked: () {

@@ -1,6 +1,7 @@
 import 'package:better_player/better_player.dart';
 import 'package:examplenew/constants.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class HlsTracksPage extends StatefulWidget {
   @override
@@ -12,10 +13,17 @@ class _HlsTracksPageState extends State<HlsTracksPage> {
 
   @override
   void initState() {
+    ///default landscape
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeRight,
+      DeviceOrientation.landscapeLeft,
+    ]);
     BetterPlayerConfiguration betterPlayerConfiguration =
         BetterPlayerConfiguration(
             aspectRatio: 16 / 9,
             fit: BoxFit.contain,
+            fullScreenByDefault: true,
+            autoDetectFullscreenAspectRatio: true,
             controlsConfiguration: BetterPlayerControlsConfiguration(
               overflowModalColor: Colors.black,
               overflowModalTextColor: Colors.white,
@@ -31,6 +39,16 @@ class _HlsTracksPageState extends State<HlsTracksPage> {
     _betterPlayerController = BetterPlayerController(betterPlayerConfiguration);
     _betterPlayerController.setupDataSource(dataSource);
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    _betterPlayerController.dispose();
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+    super.dispose();
   }
 
   @override
@@ -53,7 +71,7 @@ class _HlsTracksPageState extends State<HlsTracksPage> {
           AspectRatio(
             aspectRatio: 16 / 9,
             child: BetterPlayer(controller: _betterPlayerController),
-          ),
+          )
         ],
       ),
     );
