@@ -199,12 +199,14 @@ class _BetterPlayerMaterialControlsState
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    if (_controlsConfiguration.enablePip)
+                    /*      if (_controlsConfiguration.enablePip)
                       _buildPipButtonWrapperWidget(
                           controlsNotVisible, _onPlayerHide)
                     else
-                      const SizedBox(),
+                      const SizedBox(), */
                     // _buildAudioTracksButton(),
+                    /*        _buildPipButton(), */
+                    _buildPipButton(),
                     _buildVideoTracksButton(),
                     _buildMoreButton(),
                   ],
@@ -218,8 +220,9 @@ class _BetterPlayerMaterialControlsState
   Widget _buildPipButton() {
     return BetterPlayerMaterialClickableWidget(
       onTap: () {
-        betterPlayerController!.enablePictureInPicture(
-            betterPlayerController!.betterPlayerGlobalKey!);
+        /*   betterPlayerController!.enablePictureInPicture(
+            betterPlayerController!.betterPlayerGlobalKey!); */
+        betterPlayerController!.betterPlayerConfiguration!.pip!();
       },
       child: Padding(
         padding: const EdgeInsets.all(8),

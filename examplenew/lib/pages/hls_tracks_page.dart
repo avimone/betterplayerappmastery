@@ -2,6 +2,7 @@ import 'package:better_player/better_player.dart';
 import 'package:examplenew/constants.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:floating/floating.dart';
 
 class HlsTracksPage extends StatefulWidget {
   @override
@@ -10,20 +11,25 @@ class HlsTracksPage extends StatefulWidget {
 
 class _HlsTracksPageState extends State<HlsTracksPage> {
   late BetterPlayerController _betterPlayerController;
-
+  GlobalKey _betterPlayerKey = GlobalKey();
+  final pip = Floating();
+  bool isPipAvailable = false; // Variable to track PiP availability status
   @override
   void initState() {
     ///default landscape
-    SystemChrome.setPreferredOrientations([
+    /*  SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeRight,
       DeviceOrientation.landscapeLeft,
-    ]);
+    ]); */
     BetterPlayerConfiguration betterPlayerConfiguration =
         BetterPlayerConfiguration(
             aspectRatio: 16 / 9,
             fit: BoxFit.contain,
             fullScreenByDefault: true,
             autoDetectFullscreenAspectRatio: true,
+            pip: () async {
+              final statusAfterEnabling = await pip.enable(ImmediatePiP());
+            },
             controlsConfiguration: BetterPlayerControlsConfiguration(
               overflowModalColor: Colors.black,
               overflowModalTextColor: Colors.white,
@@ -38,7 +44,18 @@ class _HlsTracksPageState extends State<HlsTracksPage> {
     );
     _betterPlayerController = BetterPlayerController(betterPlayerConfiguration);
     _betterPlayerController.setupDataSource(dataSource);
+    _betterPlayerController?.setBetterPlayerGlobalKey(_betterPlayerKey);
+
+    _betterPlayerController?.enablePictureInPicture(_betterPlayerKey);
+    pipCheck();
     super.initState();
+  }
+
+  void pipCheck() async {
+    final canUsePiP = await pip.isPipAvailable;
+    if (canUsePiP) {
+      final statusAfterEnabling = await pip.enable(OnLeavePiP());
+    }
   }
 
   @override
@@ -53,26 +70,32 @@ class _HlsTracksPageState extends State<HlsTracksPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("HLS tracks"),
-      ),
-      body: Column(
-        children: [
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              "Player with HLS stream which loads tracks from HLS."
-              " You can choose tracks by using overflow menu (3 dots in right corner).",
-              style: TextStyle(fontSize: 16),
+    return PiPSwitcher(
+      childWhenDisabled: Scaffold(
+        appBar: AppBar(
+          title: Text("HLS tracks"),
+        ),
+        body: Column(
+          children: [
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                "Player with HLS stream which loads tracks from HLS."
+                " You can choose tracks by using overflow menu (3 dots in right corner).",
+                style: TextStyle(fontSize: 16),
+              ),
             ),
-          ),
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: BetterPlayer(controller: _betterPlayerController),
-          )
-        ],
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: BetterPlayer(controller: _betterPlayerController),
+            )
+          ],
+        ),
+      ),
+      childWhenEnabled: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: BetterPlayer(controller: _betterPlayerController),
       ),
     );
   }
