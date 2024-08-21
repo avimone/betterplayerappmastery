@@ -25,7 +25,7 @@ class _HlsTracksPageState extends State<HlsTracksPage> {
         BetterPlayerConfiguration(
             aspectRatio: 16 / 9,
             fit: BoxFit.contain,
-            fullScreenByDefault: true,
+            fullScreenByDefault: false,
             autoDetectFullscreenAspectRatio: true,
             pip: () async {
               final statusAfterEnabling = await pip.enable(ImmediatePiP());

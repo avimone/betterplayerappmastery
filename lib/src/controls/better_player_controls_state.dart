@@ -301,9 +301,12 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget>
         betterPlayerController!.betterPlayerDataSource!.asmsTrackNames ?? [];
     final List<BetterPlayerAsmsTrack> asmsTracks =
         betterPlayerController!.betterPlayerAsmsTracks;
+    final List<BetterPlayerAsmsTrack> asmsTracksSorted =
+        asmsTracks.toList(); // Create a copy to avoid modifying original list
+    asmsTracksSorted.sort((a, b) => a.width!.compareTo(b.width!));
     final List<PopupMenuEntry<String>> children = [];
-    for (var index = 0; index < asmsTracks.length; index++) {
-      final track = asmsTracks[index];
+    for (var index = 0; index < asmsTracksSorted.length; index++) {
+      final track = asmsTracksSorted[index];
 
       String? preferredName;
       if (track.height == 0 && track.width == 0 && track.bitrate == 0) {
@@ -312,12 +315,13 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget>
         preferredName =
             asmsTrackNames.length > index ? asmsTrackNames[index] : null;
       }
-      children.add(_buildTrackRow(asmsTracks[index], preferredName));
+      children.add(_buildTrackRow(asmsTracksSorted[index], preferredName));
     }
 
     // normal videos
     final resolutions =
         betterPlayerController!.betterPlayerDataSource!.resolutions;
+
     resolutions?.forEach((key, value) {
       children.add(_buildResolutionSelectionRow(key, value));
     });
@@ -345,6 +349,8 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget>
     final BetterPlayerAsmsTrack? selectedTrack =
         betterPlayerController!.betterPlayerAsmsTrack;
     final bool isSelected = selectedTrack != null && selectedTrack == track;
+    print(preferredName ??
+        "${width}x$height ${BetterPlayerUtils.formatBitrate(bitrate)} $mimeType");
 
     return PopupMenuItem<String>(
       onTap: () {
