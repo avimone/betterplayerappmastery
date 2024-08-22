@@ -894,6 +894,8 @@ class BetterPlayerController {
   ///data source.
   void setTrack(BetterPlayerAsmsTrack track) {
     if (videoPlayerController == null) {
+      print("failed changed Track ");
+
       throw StateError("The data source has not been initialized");
     }
     _postEvent(BetterPlayerEvent(BetterPlayerEventType.changedTrack,
@@ -910,6 +912,7 @@ class BetterPlayerController {
     videoPlayerController!
         .setTrackParameters(track.width, track.height, track.bitrate);
     _betterPlayerAsmsTrack = track;
+    print("changed Track ${track.width}, ${track.height}");
   }
 
   ///Check if player can be played/paused automatically

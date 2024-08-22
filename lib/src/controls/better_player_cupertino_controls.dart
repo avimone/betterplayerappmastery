@@ -513,6 +513,16 @@ class _BetterPlayerCupertinoControlsState
             )
           else
             const SizedBox(),
+          const SizedBox(
+            width: 4,
+          ),
+          _buildVideoTracksButton(
+            backgroundColor,
+            iconColor,
+            barHeight,
+            iconSize,
+            buttonPadding,
+          ),
           const Spacer(),
           if (_controlsConfiguration.enableMute)
             _buildMuteButton(
@@ -543,6 +553,60 @@ class _BetterPlayerCupertinoControlsState
       ),
     );
   }
+
+  GestureDetector _buildVideoTracksButton(
+    // VideoPlayerController? controller,
+    Color backgroundColor,
+    Color iconColor,
+    double barHeight,
+    double iconSize,
+    double buttonPadding,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        onVideoTracksClicked();
+      },
+      child: AnimatedOpacity(
+        opacity: controlsNotVisible ? 0.0 : 1.0,
+        duration: _controlsConfiguration.controlsHideTime,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10.0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: backgroundColor,
+            ),
+            child: Container(
+              height: barHeight,
+              padding: EdgeInsets.symmetric(
+                horizontal: buttonPadding,
+              ),
+              child: Icon(
+                betterPlayerControlsConfiguration.qualitiesIcon,
+                // color: betterPlayerControlsConfiguration.iconsColor,
+                color: iconColor,
+                size: iconSize,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+/*   Widget _buildVideoTracksButton() {
+    return BetterPlayerMaterialClickableWidget(
+      onTap: () {
+        onVideoTracksClicked();
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Icon(
+          betterPlayerControlsConfiguration.qualitiesIcon,
+          color: betterPlayerControlsConfiguration.iconsColor,
+        ),
+      ),
+    );
+  } */
 
   Widget _buildNextVideoWidget() {
     return StreamBuilder<int?>(

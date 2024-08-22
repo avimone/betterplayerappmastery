@@ -96,6 +96,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.2"
+  floating:
+    dependency: transitive
+    description:
+      name: floating
+      sha256: "62924c96915823ce955da32b26766e11583ce437990a601032191d6d4b0b0764"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.0.1"
   flutter:
     dependency: "direct main"
     description: flutter
