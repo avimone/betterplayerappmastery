@@ -242,7 +242,12 @@ class _BetterPlayerMaterialControlsState
     return BetterPlayerMaterialClickableWidget(
       onTap: () {
         //  _betterPlayerController!.exitPlayer();
-        Navigator.of(context).pop();
+        if (_betterPlayerController!.isFullScreen) {
+          Navigator.of(context).pop();
+          Navigator.of(context).pop();
+        } else {
+          Navigator.of(context).pop();
+        }
         /*   betterPlayerController!.enablePictureInPicture(
             betterPlayerController!.betterPlayerGlobalKey!); */
         //   betterPlayerController!.betterPlayerConfiguration!.pip!();

@@ -613,7 +613,13 @@ class BetterPlayerController {
 
   ///Enables/disables full screen mode based on current fullscreen state.
   void exitPlayer() {
-    _postControllerEvent(BetterPlayerControllerEvent.exit);
+    if (_isFullScreen) {
+      _postControllerEvent(BetterPlayerControllerEvent.exit);
+      _postEvent(BetterPlayerEvent(BetterPlayerEventType.exit));
+    } else {
+      _postControllerEvent(BetterPlayerControllerEvent.exit);
+      _postEvent(BetterPlayerEvent(BetterPlayerEventType.exit));
+    }
   }
 
   ///Start video playback. Play will be triggered only if current lifecycle state
