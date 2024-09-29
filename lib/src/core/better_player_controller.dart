@@ -601,14 +601,14 @@ class BetterPlayerController {
 
   ///Enables/disables full screen mode based on current fullscreen state.
   void toggleFullScreen() {
-    if (_betterPlayerDataSource!.liveStream!) {
-      _isFullScreen = !_isFullScreen;
-      if (_isFullScreen) {
-        _postControllerEvent(BetterPlayerControllerEvent.openFullscreen);
-      } else {
-        _postControllerEvent(BetterPlayerControllerEvent.hideFullscreen);
-      }
-    } else {}
+    //if (_betterPlayerDataSource!.liveStream!) {
+    _isFullScreen = !_isFullScreen;
+    if (_isFullScreen) {
+      _postControllerEvent(BetterPlayerControllerEvent.openFullscreen);
+    } else {
+      _postControllerEvent(BetterPlayerControllerEvent.hideFullscreen);
+    }
+    //  } else {}
   }
 
   ///Enables/disables full screen mode based on current fullscreen state.
