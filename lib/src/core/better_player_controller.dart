@@ -601,12 +601,19 @@ class BetterPlayerController {
 
   ///Enables/disables full screen mode based on current fullscreen state.
   void toggleFullScreen() {
-    _isFullScreen = !_isFullScreen;
-    if (_isFullScreen) {
-      _postControllerEvent(BetterPlayerControllerEvent.openFullscreen);
-    } else {
-      _postControllerEvent(BetterPlayerControllerEvent.hideFullscreen);
-    }
+    if (_betterPlayerDataSource!.liveStream!) {
+      _isFullScreen = !_isFullScreen;
+      if (_isFullScreen) {
+        _postControllerEvent(BetterPlayerControllerEvent.openFullscreen);
+      } else {
+        _postControllerEvent(BetterPlayerControllerEvent.hideFullscreen);
+      }
+    } else {}
+  }
+
+  ///Enables/disables full screen mode based on current fullscreen state.
+  void exitPlayer() {
+    _postControllerEvent(BetterPlayerControllerEvent.exit);
   }
 
   ///Start video playback. Play will be triggered only if current lifecycle state

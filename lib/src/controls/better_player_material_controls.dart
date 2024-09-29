@@ -12,6 +12,8 @@ import 'package:better_player/src/video_player/video_player.dart';
 // Flutter imports:
 import 'package:flutter/material.dart';
 
+import '../configuration/better_player_controller_event.dart';
+
 class BetterPlayerMaterialControls extends StatefulWidget {
   ///Callback used to send information if player bar is hidden or not
   final Function(bool visbility) onControlsVisibilityChanged;
@@ -197,18 +199,25 @@ class _BetterPlayerMaterialControlsState
                 height: _controlsConfiguration.controlBarHeight,
                 width: double.infinity,
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    /*      if (_controlsConfiguration.enablePip)
-                      _buildPipButtonWrapperWidget(
-                          controlsNotVisible, _onPlayerHide)
-                    else
-                      const SizedBox(), */
-                    // _buildAudioTracksButton(),
-                    /*        _buildPipButton(), */
-                    _buildPipButton(),
-                    _buildVideoTracksButton(),
-                    _buildMoreButton(),
+                    _buildBackButton(),
+                    Expanded(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          /*      if (_controlsConfiguration.enablePip)
+                            _buildPipButtonWrapperWidget(
+                                controlsNotVisible, _onPlayerHide)
+                          else
+                            const SizedBox(), */
+                          // _buildAudioTracksButton(),
+                          /*        _buildPipButton(), */
+                          _buildPipButton(),
+                          _buildVideoTracksButton(),
+                          _buildMoreButton(),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -228,6 +237,25 @@ class _BetterPlayerMaterialControlsState
         padding: const EdgeInsets.all(8),
         child: Icon(
           betterPlayerControlsConfiguration.pipMenuIcon,
+          color: betterPlayerControlsConfiguration.iconsColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBackButton() {
+    return BetterPlayerMaterialClickableWidget(
+      onTap: () {
+        //  _betterPlayerController!.exitPlayer();
+        Navigator.of(context).pop();
+        /*   betterPlayerController!.enablePictureInPicture(
+            betterPlayerController!.betterPlayerGlobalKey!); */
+        //   betterPlayerController!.betterPlayerConfiguration!.pip!();
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Icon(
+          Icons.arrow_back,
           color: betterPlayerControlsConfiguration.iconsColor,
         ),
       ),
