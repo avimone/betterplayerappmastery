@@ -198,27 +198,22 @@ class _BetterPlayerMaterialControlsState
               child: Container(
                 height: _controlsConfiguration.controlBarHeight,
                 width: double.infinity,
-                child: Row(
-                  children: [
-                    _buildBackButton(),
-                    Expanded(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          /*      if (_controlsConfiguration.enablePip)
-                            _buildPipButtonWrapperWidget(
-                                controlsNotVisible, _onPlayerHide)
-                          else
-                            const SizedBox(), */
-                          // _buildAudioTracksButton(),
-                          /*        _buildPipButton(), */
-                          _buildPipButton(),
-                          _buildVideoTracksButton(),
-                          _buildMoreButton(),
-                        ],
-                      ),
-                    ),
-                  ],
+                child: Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      /*      if (_controlsConfiguration.enablePip)
+                        _buildPipButtonWrapperWidget(
+                            controlsNotVisible, _onPlayerHide)
+                      else
+                        const SizedBox(), */
+                      // _buildAudioTracksButton(),
+                      /*        _buildPipButton(), */
+                      _buildPipButton(),
+                      _buildVideoTracksButton(),
+                      _buildMoreButton(), _buildBackButton(),
+                    ],
+                  ),
                 ),
               ),
             )
@@ -255,7 +250,7 @@ class _BetterPlayerMaterialControlsState
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Icon(
-          Icons.arrow_back,
+          Icons.close,
           color: betterPlayerControlsConfiguration.iconsColor,
         ),
       ),
