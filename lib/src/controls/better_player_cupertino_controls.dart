@@ -541,6 +541,9 @@ class _BetterPlayerCupertinoControlsState
             iconSize,
             buttonPadding,
           ),
+          const SizedBox(
+            width: 4,
+          ),
           if (_controlsConfiguration.enableFullscreen)
             _buildExpandButton(
               backgroundColor,
