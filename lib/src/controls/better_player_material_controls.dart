@@ -239,7 +239,7 @@ class _BetterPlayerMaterialControlsState
   Widget _buildBackButton() {
     return BetterPlayerMaterialClickableWidget(
       onTap: () {
-        //  _betterPlayerController!.exitPlayer();
+        _betterPlayerController!.exitPlayer();
         if (_betterPlayerController!.isFullScreen) {
           Navigator.of(context).pop();
           Navigator.of(context).pop();

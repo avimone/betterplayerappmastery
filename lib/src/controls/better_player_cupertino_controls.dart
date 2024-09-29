@@ -238,6 +238,50 @@ class _BetterPlayerCupertinoControlsState
     );
   }
 
+  GestureDetector _buildExitButton(
+    Color backgroundColor,
+    Color iconColor,
+    double barHeight,
+    double iconSize,
+    double buttonPadding,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        _betterPlayerController!.exitPlayer();
+        if (_betterPlayerController!.isFullScreen) {
+          Navigator.of(context).pop();
+          Navigator.of(context).pop();
+        } else {
+          Navigator.of(context).pop();
+        }
+        /*   betterPlayerController!.enablePictureInPicture(
+            betterPlayerController!.betterPlayerGlobalKey!); */
+        //   betterPlayerController!.betterPlayerConfiguration!.pip!();
+      },
+      child: AnimatedOpacity(
+        opacity: controlsNotVisible ? 0.0 : 1.0,
+        duration: _controlsConfiguration.controlsHideTime,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            height: barHeight,
+            padding: EdgeInsets.symmetric(
+              horizontal: buttonPadding,
+            ),
+            decoration: BoxDecoration(color: backgroundColor),
+            child: Center(
+              child: Icon(
+                Icons.close,
+                color: iconColor,
+                size: iconSize,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   GestureDetector _buildExpandButton(
     Color backgroundColor,
     Color iconColor,
@@ -490,6 +534,13 @@ class _BetterPlayerCupertinoControlsState
       ),
       child: Row(
         children: <Widget>[
+          _buildExitButton(
+            backgroundColor,
+            iconColor,
+            barHeight,
+            iconSize,
+            buttonPadding,
+          ),
           if (_controlsConfiguration.enableFullscreen)
             _buildExpandButton(
               backgroundColor,
