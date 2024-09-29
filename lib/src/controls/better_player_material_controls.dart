@@ -198,22 +198,20 @@ class _BetterPlayerMaterialControlsState
               child: Container(
                 height: _controlsConfiguration.controlBarHeight,
                 width: double.infinity,
-                child: Expanded(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      /*      if (_controlsConfiguration.enablePip)
-                        _buildPipButtonWrapperWidget(
-                            controlsNotVisible, _onPlayerHide)
-                      else
-                        const SizedBox(), */
-                      // _buildAudioTracksButton(),
-                      /*        _buildPipButton(), */
-                      _buildPipButton(),
-                      _buildVideoTracksButton(),
-                      _buildMoreButton(), _buildBackButton(),
-                    ],
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    /*      if (_controlsConfiguration.enablePip)
+                      _buildPipButtonWrapperWidget(
+                          controlsNotVisible, _onPlayerHide)
+                    else
+                      const SizedBox(), */
+                    // _buildAudioTracksButton(),
+                    /*        _buildPipButton(), */
+                    _buildPipButton(),
+                    _buildVideoTracksButton(),
+                    _buildMoreButton(), _buildBackButton(),
+                  ],
                 ),
               ),
             )
