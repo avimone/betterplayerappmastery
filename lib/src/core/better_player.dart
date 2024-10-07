@@ -152,6 +152,8 @@ class _BetterPlayerState extends State<BetterPlayer>
       await _pushFullScreenWidget(context);
     } else if (_isFullScreen) {
       Navigator.of(context, rootNavigator: true).pop();
+      Navigator.of(context, rootNavigator: true).pop();
+
       _isFullScreen = false;
       controller
           .postEvent(BetterPlayerEvent(BetterPlayerEventType.hideFullscreen));
@@ -246,7 +248,6 @@ class _BetterPlayerState extends State<BetterPlayer>
     if (!_betterPlayerConfiguration.allowedScreenSleep) {
       WakelockPlus.enable();
     }
-    Navigator.of(context, rootNavigator: true).pop();
 
     await Navigator.of(context, rootNavigator: true).push(route);
     _isFullScreen = false;
