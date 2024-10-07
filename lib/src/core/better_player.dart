@@ -172,7 +172,7 @@ class _BetterPlayerState extends State<BetterPlayer>
       Animation<double> animation,
       BetterPlayerControllerProvider controllerProvider) {
     return PopScope(
-      canPop: false,
+      canPop: true,
       onPopInvoked: (a) {
         Navigator.of(context).pop();
         Navigator.of(context).pop();
