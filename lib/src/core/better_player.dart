@@ -152,7 +152,6 @@ class _BetterPlayerState extends State<BetterPlayer>
       await _pushFullScreenWidget(context);
     } else if (_isFullScreen) {
       Navigator.of(context, rootNavigator: true).pop();
-      Navigator.of(context, rootNavigator: true).pop();
 
       _isFullScreen = false;
       controller
@@ -172,12 +171,19 @@ class _BetterPlayerState extends State<BetterPlayer>
       BuildContext context,
       Animation<double> animation,
       BetterPlayerControllerProvider controllerProvider) {
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      body: Container(
-        alignment: Alignment.center,
-        color: Colors.black,
-        child: controllerProvider,
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (a) {
+        Navigator.of(context).pop();
+        Navigator.of(context).pop();
+      },
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        body: Container(
+          alignment: Alignment.center,
+          color: Colors.black,
+          child: controllerProvider,
+        ),
       ),
     );
   }
