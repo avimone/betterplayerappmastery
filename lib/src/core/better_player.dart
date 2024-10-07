@@ -246,6 +246,7 @@ class _BetterPlayerState extends State<BetterPlayer>
     if (!_betterPlayerConfiguration.allowedScreenSleep) {
       WakelockPlus.enable();
     }
+    Navigator.of(context, rootNavigator: true).pop();
 
     await Navigator.of(context, rootNavigator: true).push(route);
     _isFullScreen = false;
