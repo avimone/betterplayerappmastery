@@ -102,7 +102,7 @@ class _BetterPlayerState extends State<BetterPlayer>
     ///full screen is on, then full screen route must be pop and return to normal
     ///state.
     if (_isFullScreen) {
-      WakelockPlus.disable();
+      // WakelockPlus.disable();
       _navigatorState.maybePop();
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
           overlays: _betterPlayerConfiguration.systemOverlaysAfterFullScreen);
@@ -247,13 +247,13 @@ class _BetterPlayerState extends State<BetterPlayer>
       WakelockPlus.enable();
     }
 
-    await Navigator.of(context, rootNavigator: true).push(route);
+    await Navigator.of(context, rootNavigator: true).pushReplacement(route);
     _isFullScreen = false;
     widget.controller.exitFullScreen();
 
     // The wakelock plugins checks whether it needs to perform an action internally,
     // so we do not need to check Wakelock.isEnabled.
-    WakelockPlus.disable();
+    //  WakelockPlus.disable();
 
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: _betterPlayerConfiguration.systemOverlaysAfterFullScreen);
