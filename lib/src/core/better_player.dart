@@ -171,11 +171,11 @@ class _BetterPlayerState extends State<BetterPlayer>
       BuildContext context,
       Animation<double> animation,
       BetterPlayerControllerProvider controllerProvider) {
-    return PopScope(
-      canPop: true,
-      onPopInvoked: (a) {
-        Navigator.of(context).pop();
-        Navigator.of(context).pop();
+    return WillPopScope(
+      onWillPop: () async {
+        Navigator.pop(context);
+        Navigator.pop(context);
+        return false; // Prevent default back button behavior
       },
       child: Scaffold(
         resizeToAvoidBottomInset: false,
