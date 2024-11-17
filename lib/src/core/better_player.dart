@@ -64,6 +64,8 @@ class _BetterPlayerState extends State<BetterPlayer>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    SystemChrome.setPreferredOrientations(
+        [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
   }
 
   @override
@@ -171,6 +173,8 @@ class _BetterPlayerState extends State<BetterPlayer>
       BuildContext context,
       Animation<double> animation,
       BetterPlayerControllerProvider controllerProvider) {
+    SystemChrome.setPreferredOrientations(
+        [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
     return WillPopScope(
       onWillPop: () async {
         Navigator.pop(context);
@@ -229,7 +233,8 @@ class _BetterPlayerState extends State<BetterPlayer>
 
     if (_betterPlayerConfiguration.autoDetectFullscreenDeviceOrientation ==
         true) {
-      final aspectRatio =
+      print("Auto detect Orientation");
+      /* final aspectRatio =
           widget.controller.videoPlayerController?.value.aspectRatio ?? 1.0;
       List<DeviceOrientation> deviceOrientations;
       if (aspectRatio < 1.0) {
@@ -243,12 +248,12 @@ class _BetterPlayerState extends State<BetterPlayer>
           DeviceOrientation.landscapeRight
         ];
       }
-      await SystemChrome.setPreferredOrientations(deviceOrientations);
+      await SystemChrome.setPreferredOrientations(deviceOrientations); */
     } else {
+      print("Manuall detect Orientation");
+
       await SystemChrome.setPreferredOrientations(
-        widget.controller.betterPlayerConfiguration
-            .deviceOrientationsOnFullScreen,
-      );
+          [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
     }
 
     if (!_betterPlayerConfiguration.allowedScreenSleep) {
@@ -266,7 +271,7 @@ class _BetterPlayerState extends State<BetterPlayer>
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive,
         overlays: _betterPlayerConfiguration.systemOverlaysAfterFullScreen);
     await SystemChrome.setPreferredOrientations(
-        _betterPlayerConfiguration.deviceOrientationsAfterFullScreen);
+        [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
   }
 
   Widget _buildPlayer() {
