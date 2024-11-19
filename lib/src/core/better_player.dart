@@ -64,8 +64,6 @@ class _BetterPlayerState extends State<BetterPlayer>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    SystemChrome.setPreferredOrientations(
-        [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
   }
 
   @override
@@ -151,7 +149,7 @@ class _BetterPlayerState extends State<BetterPlayer>
       _isFullScreen = true;
       controller
           .postEvent(BetterPlayerEvent(BetterPlayerEventType.openFullscreen));
-      //  await _pushFullScreenWidget(context);
+      await _pushFullScreenWidget(context);
     } else if (_isFullScreen) {
       Navigator.of(context, rootNavigator: true).pop();
 
@@ -173,8 +171,6 @@ class _BetterPlayerState extends State<BetterPlayer>
       BuildContext context,
       Animation<double> animation,
       BetterPlayerControllerProvider controllerProvider) {
-    SystemChrome.setPreferredOrientations(
-        [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
     return WillPopScope(
       onWillPop: () async {
         Navigator.pop(context);
@@ -233,8 +229,7 @@ class _BetterPlayerState extends State<BetterPlayer>
 
     if (_betterPlayerConfiguration.autoDetectFullscreenDeviceOrientation ==
         true) {
-      print("Auto detect Orientation");
-      /* final aspectRatio =
+      final aspectRatio =
           widget.controller.videoPlayerController?.value.aspectRatio ?? 1.0;
       List<DeviceOrientation> deviceOrientations;
       if (aspectRatio < 1.0) {
@@ -248,12 +243,12 @@ class _BetterPlayerState extends State<BetterPlayer>
           DeviceOrientation.landscapeRight
         ];
       }
-      await SystemChrome.setPreferredOrientations(deviceOrientations); */
+      await SystemChrome.setPreferredOrientations(deviceOrientations);
     } else {
-      print("Manuall detect Orientation");
-
       await SystemChrome.setPreferredOrientations(
-          [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+        widget.controller.betterPlayerConfiguration
+            .deviceOrientationsOnFullScreen,
+      );
     }
 
     if (!_betterPlayerConfiguration.allowedScreenSleep) {
@@ -271,7 +266,7 @@ class _BetterPlayerState extends State<BetterPlayer>
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive,
         overlays: _betterPlayerConfiguration.systemOverlaysAfterFullScreen);
     await SystemChrome.setPreferredOrientations(
-        [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+        _betterPlayerConfiguration.deviceOrientationsAfterFullScreen);
   }
 
   Widget _buildPlayer() {
