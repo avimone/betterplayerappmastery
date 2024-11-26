@@ -67,7 +67,12 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget>
     await showMenu<String>(
             context: context,
             position: RelativeRect.fromLTRB(
-                300, MediaQuery.of(context).size.height - 300, 0.0, 0.0),
+                300,
+                betterPlayerController!.isFullScreen
+                    ? MediaQuery.of(context).size.height - 300
+                    : MediaQuery.of(context).size.height - 600,
+                0.0,
+                0.0),
             items: items,
             elevation: 8.0,
             color: Colors.black)
@@ -343,9 +348,8 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget>
     final int height = track.height ?? 0;
     final int bitrate = track.bitrate ?? 0;
     final String mimeType = (track.mimeType ?? '').replaceAll('video/', '');
-    final String trackName = preferredName ??
-        "${width}x$height ${BetterPlayerUtils.formatBitrate(bitrate)} $mimeType";
-
+    final String trackName = preferredName ?? "${width}x$height";
+//${BetterPlayerUtils.formatBitrate(bitrate)} $mimeType
     final BetterPlayerAsmsTrack? selectedTrack =
         betterPlayerController!.betterPlayerAsmsTrack;
     final bool isSelected = selectedTrack != null && selectedTrack == track;

@@ -533,6 +533,7 @@ class _BetterPlayerCupertinoControlsState
         left: marginSize,
       ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
         children: <Widget>[
           _buildExitButton(
             backgroundColor,
@@ -577,7 +578,10 @@ class _BetterPlayerCupertinoControlsState
             iconSize,
             buttonPadding,
           ),
-          const Spacer(),
+          const SizedBox(
+            width: 4,
+          ),
+          // const Spacer(),
           if (_controlsConfiguration.enableMute)
             _buildMuteButton(
               _controller,
