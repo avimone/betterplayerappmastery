@@ -558,7 +558,7 @@ class _BetterPlayerCupertinoControlsState
           const SizedBox(
             width: 4,
           ),
-          if (_controlsConfiguration.enablePip)
+/*           if (_controlsConfiguration.enablePip)
             _buildPipButton(
               backgroundColor,
               iconColor,
@@ -567,7 +567,7 @@ class _BetterPlayerCupertinoControlsState
               buttonPadding,
             )
           else
-            const SizedBox(),
+            const SizedBox(), */
           const SizedBox(
             width: 4,
           ),
