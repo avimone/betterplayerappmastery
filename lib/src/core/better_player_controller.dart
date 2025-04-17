@@ -771,6 +771,8 @@ class BetterPlayerController {
     }
   }
 
+  int _retryCount = 0;
+  final int _maxRetryCount = 5; // Or 5 times
   ///Listener used to handle video player changes.
   void _onVideoPlayerChanged() async {
     final VideoPlayerValue currentVideoPlayerValue =
@@ -787,6 +789,17 @@ class BetterPlayerController {
           },
         ),
       );
+      // 🚀 Automatically retry after short delay
+      if (_retryCount < _maxRetryCount) {
+        _retryCount++;
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!_disposed) {
+            retryDataSource();
+          }
+        });
+      } else {
+        print("Max retry attempts reached, not retrying further.");
+      }
     }
     if (currentVideoPlayerValue.initialized &&
         !_hasCurrentDataSourceInitialized) {
