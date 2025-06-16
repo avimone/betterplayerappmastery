@@ -10,6 +10,8 @@ import 'package:better_player/src/video_player/video_player.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+import '../configuration/better_player_configuration.dart';
+
 class BetterPlayerCupertinoControls extends StatefulWidget {
   ///Callback used to send information if player bar is hidden or not
   final Function(bool visbility) onControlsVisibilityChanged;
@@ -156,75 +158,6 @@ class _BetterPlayerCupertinoControlsState
     }
 
     super.didChangeDependencies();
-  }
-
-  Widget _buildBottomBar(
-    Color backgroundColor,
-    Color iconColor,
-    double barHeight,
-  ) {
-    if (!betterPlayerController!.controlsEnabled) {
-      return const SizedBox();
-    }
-    return AnimatedOpacity(
-      opacity: controlsNotVisible ? 0.0 : 1.0,
-      duration: _controlsConfiguration.controlsHideTime,
-      onEnd: _onPlayerHide,
-      child: Container(
-        alignment: Alignment.bottomCenter,
-        margin: EdgeInsets.all(marginSize),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            height: barHeight,
-            decoration: BoxDecoration(
-              color: backgroundColor,
-            ),
-            child: _betterPlayerController!.isLiveStream()
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      const SizedBox(width: 8),
-                      if (_controlsConfiguration.enablePlayPause)
-                        _buildPlayPause(_controller!, iconColor, barHeight)
-                      else
-                        const SizedBox(),
-                      const SizedBox(width: 8),
-                      _buildLiveWidget(),
-                    ],
-                  )
-                : Row(
-                    children: <Widget>[
-                      if (_controlsConfiguration.enableSkips)
-                        _buildSkipBack(iconColor, barHeight)
-                      else
-                        const SizedBox(),
-                      if (_controlsConfiguration.enablePlayPause)
-                        _buildPlayPause(_controller!, iconColor, barHeight)
-                      else
-                        const SizedBox(),
-                      if (_controlsConfiguration.enableSkips)
-                        _buildSkipForward(iconColor, barHeight)
-                      else
-                        const SizedBox(),
-                      if (_controlsConfiguration.enableProgressText)
-                        _buildPosition()
-                      else
-                        const SizedBox(),
-                      if (_controlsConfiguration.enableProgressBar)
-                        _buildProgressBar()
-                      else
-                        const SizedBox(),
-                      if (_controlsConfiguration.enableProgressText)
-                        _buildRemaining()
-                      else
-                        const SizedBox()
-                    ],
-                  ),
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildLiveWidget() {
@@ -514,6 +447,57 @@ class _BetterPlayerCupertinoControlsState
     );
   }
 
+  Widget _buildDownloadWidget(
+    Color backgroundColor,
+    Color iconColor,
+    double barHeight,
+    double iconSize,
+    double buttonPadding,
+  ) {
+    final config = _betterPlayerController!.betterPlayerConfiguration;
+
+    if (config.downloadWidget == null && config.downloadFunction == null) {
+      return const SizedBox();
+    }
+
+    // If custom widget is provided, use it
+    if (config.downloadWidget != null) {
+      return AnimatedOpacity(
+        opacity: controlsNotVisible ? 0.0 : 1.0,
+        duration: _controlsConfiguration.controlsHideTime,
+        child: config.downloadWidget!,
+      );
+    }
+
+    // If only function is provided, create a default download button
+    if (config.downloadFunction != null) {
+      return GestureDetector(
+        onTap: () => config.downloadFunction!(),
+        child: AnimatedOpacity(
+          opacity: controlsNotVisible ? 0.0 : 1.0,
+          duration: _controlsConfiguration.controlsHideTime,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              height: barHeight,
+              padding: EdgeInsets.symmetric(horizontal: buttonPadding),
+              decoration: BoxDecoration(color: backgroundColor),
+              child: Center(
+                child: Icon(
+                  Icons.download_outlined,
+                  color: iconColor,
+                  size: iconSize,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox();
+  }
+
   Widget _buildTopBar(
     Color backgroundColor,
     Color iconColor,
@@ -523,8 +507,11 @@ class _BetterPlayerCupertinoControlsState
     if (!betterPlayerController!.controlsEnabled) {
       return const SizedBox();
     }
+
+    final config = _betterPlayerController!.betterPlayerConfiguration;
     final barHeight = topBarHeight * 0.8;
     final iconSize = topBarHeight * 0.4;
+
     return Container(
       height: barHeight,
       margin: EdgeInsets.only(
@@ -541,9 +528,19 @@ class _BetterPlayerCupertinoControlsState
             iconSize,
             buttonPadding,
           ),
-          const SizedBox(
-            width: 4,
-          ),
+          const SizedBox(width: 4),
+
+          // Download widget on the left
+          if (config.downloadButtonPosition == DownloadButtonPosition.topLeft)
+            _buildDownloadWidget(
+              backgroundColor,
+              iconColor,
+              barHeight,
+              iconSize,
+              buttonPadding,
+            ),
+          const SizedBox(width: 4),
+
           if (_controlsConfiguration.enableFullscreen)
             _buildExpandButton(
               backgroundColor,
@@ -554,9 +551,8 @@ class _BetterPlayerCupertinoControlsState
             )
           else
             const SizedBox(),
-          const SizedBox(
-            width: 4,
-          ),
+          const SizedBox(width: 4),
+
           if (_controlsConfiguration.enablePip)
             _buildPipButton(
               backgroundColor,
@@ -567,9 +563,8 @@ class _BetterPlayerCupertinoControlsState
             )
           else
             const SizedBox(),
-          const SizedBox(
-            width: 4,
-          ),
+          const SizedBox(width: 4),
+
           _buildVideoTracksButton(
             backgroundColor,
             iconColor,
@@ -577,7 +572,20 @@ class _BetterPlayerCupertinoControlsState
             iconSize,
             buttonPadding,
           ),
+
           const Spacer(),
+
+          // Download widget on the right
+          if (config.downloadButtonPosition == DownloadButtonPosition.topRight)
+            _buildDownloadWidget(
+              backgroundColor,
+              iconColor,
+              barHeight,
+              iconSize,
+              buttonPadding,
+            ),
+          const SizedBox(width: 4),
+
           if (_controlsConfiguration.enableMute)
             _buildMuteButton(
               _controller,
@@ -589,9 +597,8 @@ class _BetterPlayerCupertinoControlsState
             )
           else
             const SizedBox(),
-          const SizedBox(
-            width: 4,
-          ),
+          const SizedBox(width: 4),
+
           if (_controlsConfiguration.enableOverflowMenu)
             _buildMoreButton(
               _controller,
@@ -604,6 +611,113 @@ class _BetterPlayerCupertinoControlsState
           else
             const SizedBox(),
         ],
+      ),
+    );
+  }
+
+// Modify the _buildBottomBar method
+  Widget _buildBottomBar(
+    Color backgroundColor,
+    Color iconColor,
+    double barHeight,
+  ) {
+    if (!betterPlayerController!.controlsEnabled) {
+      return const SizedBox();
+    }
+
+    final config = _betterPlayerController!.betterPlayerConfiguration;
+
+    return AnimatedOpacity(
+      opacity: controlsNotVisible ? 0.0 : 1.0,
+      duration: _controlsConfiguration.controlsHideTime,
+      onEnd: _onPlayerHide,
+      child: Container(
+        alignment: Alignment.bottomCenter,
+        margin: EdgeInsets.all(marginSize),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            height: barHeight,
+            decoration: BoxDecoration(color: backgroundColor),
+            child: _betterPlayerController!.isLiveStream()
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: <Widget>[
+                      const SizedBox(width: 8),
+                      if (config.downloadButtonPosition ==
+                          DownloadButtonPosition.bottomLeft)
+                        _buildDownloadWidget(
+                          backgroundColor,
+                          iconColor,
+                          barHeight,
+                          barHeight * 0.4,
+                          8.0,
+                        ),
+                      if (_controlsConfiguration.enablePlayPause)
+                        _buildPlayPause(_controller!, iconColor, barHeight)
+                      else
+                        const SizedBox(),
+                      const SizedBox(width: 8),
+                      _buildLiveWidget(),
+                      if (config.downloadButtonPosition ==
+                          DownloadButtonPosition.bottomRight)
+                        _buildDownloadWidget(
+                          backgroundColor,
+                          iconColor,
+                          barHeight,
+                          barHeight * 0.4,
+                          8.0,
+                        ),
+                    ],
+                  )
+                : Row(
+                    children: <Widget>[
+                      if (config.downloadButtonPosition ==
+                          DownloadButtonPosition.bottomLeft)
+                        _buildDownloadWidget(
+                          backgroundColor,
+                          iconColor,
+                          barHeight,
+                          barHeight * 0.4,
+                          8.0,
+                        ),
+                      if (_controlsConfiguration.enableSkips)
+                        _buildSkipBack(iconColor, barHeight)
+                      else
+                        const SizedBox(),
+                      if (_controlsConfiguration.enablePlayPause)
+                        _buildPlayPause(_controller!, iconColor, barHeight)
+                      else
+                        const SizedBox(),
+                      if (_controlsConfiguration.enableSkips)
+                        _buildSkipForward(iconColor, barHeight)
+                      else
+                        const SizedBox(),
+                      if (_controlsConfiguration.enableProgressText)
+                        _buildPosition()
+                      else
+                        const SizedBox(),
+                      if (_controlsConfiguration.enableProgressBar)
+                        _buildProgressBar()
+                      else
+                        const SizedBox(),
+                      if (_controlsConfiguration.enableProgressText)
+                        _buildRemaining()
+                      else
+                        const SizedBox(),
+                      if (config.downloadButtonPosition ==
+                          DownloadButtonPosition.bottomRight)
+                        _buildDownloadWidget(
+                          backgroundColor,
+                          iconColor,
+                          barHeight,
+                          barHeight * 0.4,
+                          8.0,
+                        ),
+                    ],
+                  ),
+          ),
+        ),
       ),
     );
   }

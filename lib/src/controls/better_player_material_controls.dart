@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:better_player/src/configuration/better_player_configuration.dart';
 import 'package:better_player/src/configuration/better_player_controls_configuration.dart';
 import 'package:better_player/src/controls/better_player_clickable_widget.dart';
 import 'package:better_player/src/controls/better_player_controls_state.dart';
@@ -145,6 +146,43 @@ class _BetterPlayerMaterialControlsState
     super.didChangeDependencies();
   }
 
+  Widget _buildDownloadWidget() {
+    final config = _betterPlayerController!.betterPlayerConfiguration;
+
+    if (config.downloadWidget == null && config.downloadFunction == null) {
+      return const SizedBox();
+    }
+
+    // If custom widget is provided, use it
+    if (config.downloadWidget != null) {
+      return AnimatedOpacity(
+        opacity: controlsNotVisible ? 0.0 : 1.0,
+        duration: _controlsConfiguration.controlsHideTime,
+        child: config.downloadWidget!,
+      );
+    }
+
+    // If only function is provided, create a default download button
+    if (config.downloadFunction != null) {
+      return AnimatedOpacity(
+        opacity: controlsNotVisible ? 0.0 : 1.0,
+        duration: _controlsConfiguration.controlsHideTime,
+        child: BetterPlayerMaterialClickableWidget(
+          onTap: () => config.downloadFunction!(),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Icon(
+              Icons.download_outlined,
+              color: _controlsConfiguration.iconsColor,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return const SizedBox();
+  }
+
   Widget _buildErrorWidget() {
     final errorBuilder =
         _betterPlayerController!.betterPlayerConfiguration.errorBuilder;
@@ -189,8 +227,13 @@ class _BetterPlayerMaterialControlsState
       return const SizedBox();
     }
 
+    final config = _betterPlayerController!.betterPlayerConfiguration;
+    final showDownloadInTopBar =
+        config.downloadButtonPosition == DownloadButtonPosition.topLeft ||
+            config.downloadButtonPosition == DownloadButtonPosition.topRight;
+
     return Container(
-      child: (_controlsConfiguration.enableOverflowMenu)
+      child: (_controlsConfiguration.enableOverflowMenu || showDownloadInTopBar)
           ? AnimatedOpacity(
               opacity: controlsNotVisible ? 0.0 : 1.0,
               duration: _controlsConfiguration.controlsHideTime,
@@ -199,18 +242,30 @@ class _BetterPlayerMaterialControlsState
                 height: _controlsConfiguration.controlBarHeight,
                 width: double.infinity,
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    /*      if (_controlsConfiguration.enablePip)
-                      _buildPipButtonWrapperWidget(
-                          controlsNotVisible, _onPlayerHide)
-                    else
-                      const SizedBox(), */
-                    // _buildAudioTracksButton(),
-                    /*        _buildPipButton(), */
-                    _buildPipButton(),
-                    _buildVideoTracksButton(),
-                    _buildMoreButton(), _buildBackButton(),
+                    // Left side controls
+                    Row(
+                      children: [
+                        if (config.downloadButtonPosition ==
+                            DownloadButtonPosition.topLeft)
+                          _buildDownloadWidget(),
+                      ],
+                    ),
+
+                    // Right side controls
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (config.downloadButtonPosition ==
+                            DownloadButtonPosition.topRight)
+                          _buildDownloadWidget(),
+                        _buildPipButton(),
+                        _buildVideoTracksButton(),
+                        _buildMoreButton(),
+                        _buildBackButton(),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -338,6 +393,12 @@ class _BetterPlayerMaterialControlsState
     if (!betterPlayerController!.controlsEnabled) {
       return const SizedBox();
     }
+
+    final config = _betterPlayerController!.betterPlayerConfiguration;
+    final showDownloadInBottomBar =
+        config.downloadButtonPosition == DownloadButtonPosition.bottomLeft ||
+            config.downloadButtonPosition == DownloadButtonPosition.bottomRight;
+
     return AnimatedOpacity(
       opacity: controlsNotVisible ? 0.0 : 1.0,
       duration: _controlsConfiguration.controlsHideTime,
@@ -355,17 +416,30 @@ class _BetterPlayerMaterialControlsState
                     _buildPlayPause(_controller!)
                   else
                     const SizedBox(),
+
                   if (_betterPlayerController!.isLiveStream())
                     _buildLiveWidget()
                   else
                     _controlsConfiguration.enableProgressText
                         ? Expanded(child: _buildPosition())
                         : const SizedBox(),
+
                   const Spacer(),
+
+                  // Download widget in bottom bar
+                  if (config.downloadButtonPosition ==
+                      DownloadButtonPosition.bottomLeft)
+                    _buildDownloadWidget(),
+
                   if (_controlsConfiguration.enableMute)
                     _buildMuteButton(_controller)
                   else
                     const SizedBox(),
+
+                  if (config.downloadButtonPosition ==
+                      DownloadButtonPosition.bottomRight)
+                    _buildDownloadWidget(),
+
                   if (_controlsConfiguration.enableFullscreen)
                     _buildExpandButton()
                   else

@@ -120,6 +120,15 @@ class BetterPlayerConfiguration {
 
   final Function? pip;
 
+  /// Custom download widget to be displayed in the controls overlay
+  final Widget? downloadWidget;
+
+  /// Custom download function to be called when download action is triggered
+  final Function? downloadFunction;
+
+  /// Position of download button in controls (topLeft, topRight, bottomLeft, bottomRight)
+  final DownloadButtonPosition downloadButtonPosition;
+
   const BetterPlayerConfiguration({
     this.aspectRatio,
     this.autoPlay = false,
@@ -133,7 +142,10 @@ class BetterPlayerConfiguration {
     this.errorBuilder,
     this.allowedScreenSleep = true,
     this.fullScreenAspectRatio,
-    this.pip,
+    this.pip, // Add these new parameters
+    this.downloadWidget,
+    this.downloadFunction,
+    this.downloadButtonPosition = DownloadButtonPosition.topRight,
     this.deviceOrientationsOnFullScreen = const [
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -170,7 +182,10 @@ class BetterPlayerConfiguration {
     Widget? placeholder,
     bool? showPlaceholderUntilPlay,
     bool? placeholderOnTop,
-    Widget? overlay,
+    Widget? overlay, // Add these new parameters
+    Widget? downloadWidget,
+    Function? downloadFunction,
+    DownloadButtonPosition? downloadButtonPosition,
     bool? showControlsOnInitialize,
     Widget Function(BuildContext context, String? errorMessage)? errorBuilder,
     bool? allowedScreenSleep,
@@ -232,6 +247,18 @@ class BetterPlayerConfiguration {
       autoDispose: autoDispose ?? this.autoDispose,
       expandToFill: expandToFill ?? this.expandToFill,
       useRootNavigator: useRootNavigator ?? this.useRootNavigator,
+      downloadWidget: downloadWidget ?? this.downloadWidget,
+      downloadFunction: downloadFunction ?? this.downloadFunction,
+      downloadButtonPosition:
+          downloadButtonPosition ?? this.downloadButtonPosition,
     );
   }
+}
+
+// Add this enum for download button positioning
+enum DownloadButtonPosition {
+  topLeft,
+  topRight,
+  bottomLeft,
+  bottomRight,
 }
