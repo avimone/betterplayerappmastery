@@ -91,6 +91,12 @@ class BetterPlayerControlsConfiguration {
   ///Control bar height
   final double controlBarHeight;
 
+  ///Icon Sizes
+  final double iconSize;
+
+  ///Text Style of TimeBar
+  final TextStyle timeBarStyle;
+
   ///Live text color;
   final Color liveTextColor;
 
@@ -191,6 +197,13 @@ class BetterPlayerControlsConfiguration {
     this.showControls = true,
     this.showControlsOnInitialize = true,
     this.controlBarHeight = 48.0,
+    this.iconSize = 24.0, // Default icon size
+    this.timeBarStyle = const TextStyle(
+      // Default text style
+      fontSize: 12.0,
+      color: Colors.white,
+      decoration: TextDecoration.none,
+    ),
     this.liveTextColor = Colors.red,
     this.enableOverflowMenu = true,
     this.enablePlaybackSpeed = true,

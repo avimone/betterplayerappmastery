@@ -286,6 +286,7 @@ class _BetterPlayerMaterialControlsState
         child: Icon(
           betterPlayerControlsConfiguration.pipMenuIcon,
           color: betterPlayerControlsConfiguration.iconsColor,
+          size: _controlsConfiguration.iconSize,
         ),
       ),
     );
@@ -310,6 +311,7 @@ class _BetterPlayerMaterialControlsState
         child: Icon(
           Icons.close,
           color: betterPlayerControlsConfiguration.iconsColor,
+          size: _controlsConfiguration.iconSize,
         ),
       ),
     );
@@ -325,6 +327,7 @@ class _BetterPlayerMaterialControlsState
         child: Icon(
           betterPlayerControlsConfiguration.audioTracksIcon,
           color: betterPlayerControlsConfiguration.iconsColor,
+          size: _controlsConfiguration.iconSize,
         ),
       ),
     );
@@ -340,6 +343,7 @@ class _BetterPlayerMaterialControlsState
         child: Icon(
           betterPlayerControlsConfiguration.qualitiesIcon,
           color: betterPlayerControlsConfiguration.iconsColor,
+          size: _controlsConfiguration.iconSize,
         ),
       ),
     );
@@ -384,6 +388,7 @@ class _BetterPlayerMaterialControlsState
         child: Icon(
           _controlsConfiguration.overflowMenuIcon,
           color: _controlsConfiguration.iconsColor,
+          size: _controlsConfiguration.iconSize,
         ),
       ),
     );
@@ -485,6 +490,7 @@ class _BetterPlayerMaterialControlsState
                     ? _controlsConfiguration.fullscreenDisableIcon
                     : _controlsConfiguration.fullscreenEnableIcon,
                 color: _controlsConfiguration.iconsColor,
+                size: _controlsConfiguration.iconSize,
               ),
             ),
           ),
@@ -675,6 +681,7 @@ class _BetterPlayerMaterialControlsState
                   ? _controlsConfiguration.muteIcon
                   : _controlsConfiguration.unMuteIcon,
               color: _controlsConfiguration.iconsColor,
+              size: _controlsConfiguration.iconSize,
             ),
           ),
         ),
@@ -695,6 +702,7 @@ class _BetterPlayerMaterialControlsState
               ? _controlsConfiguration.pauseIcon
               : _controlsConfiguration.playIcon,
           color: _controlsConfiguration.iconsColor,
+          size: _controlsConfiguration.iconSize,
         ),
       ),
     );
@@ -714,19 +722,23 @@ class _BetterPlayerMaterialControlsState
       child: RichText(
         text: TextSpan(
             text: BetterPlayerUtils.formatDuration(position),
-            style: TextStyle(
+            style: _controlsConfiguration
+                .timeBarStyle /*  TextStyle(
               fontSize: 10.0,
               color: _controlsConfiguration.textColor,
               decoration: TextDecoration.none,
-            ),
+            ) */
+            ,
             children: <TextSpan>[
               TextSpan(
                 text: ' / ${BetterPlayerUtils.formatDuration(duration)}',
-                style: TextStyle(
+                style: _controlsConfiguration
+                    .timeBarStyle /* TextStyle(
                   fontSize: 10.0,
                   color: _controlsConfiguration.textColor,
                   decoration: TextDecoration.none,
-                ),
+                ) */
+                ,
               )
             ]),
       ),
