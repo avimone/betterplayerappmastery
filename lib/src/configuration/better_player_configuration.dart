@@ -129,6 +129,12 @@ class BetterPlayerConfiguration {
   /// Position of download button in controls (topLeft, topRight, bottomLeft, bottomRight)
   final DownloadButtonPosition downloadButtonPosition;
 
+  /// Title to be displayed in the top left corner of the controls
+  final String? title;
+
+  /// Style for the title text. If null, default style will be used.
+  final TextStyle? titleStyle;
+
   const BetterPlayerConfiguration({
     this.aspectRatio,
     this.autoPlay = false,
@@ -142,10 +148,12 @@ class BetterPlayerConfiguration {
     this.errorBuilder,
     this.allowedScreenSleep = true,
     this.fullScreenAspectRatio,
-    this.pip, // Add these new parameters
+    this.pip,
     this.downloadWidget,
     this.downloadFunction,
     this.downloadButtonPosition = DownloadButtonPosition.topRight,
+    this.title, // Add title parameter
+    this.titleStyle, // Add title style parameter
     this.deviceOrientationsOnFullScreen = const [
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -182,10 +190,12 @@ class BetterPlayerConfiguration {
     Widget? placeholder,
     bool? showPlaceholderUntilPlay,
     bool? placeholderOnTop,
-    Widget? overlay, // Add these new parameters
+    Widget? overlay,
     Widget? downloadWidget,
     Function? downloadFunction,
     DownloadButtonPosition? downloadButtonPosition,
+    String? title, // Add title parameter
+    TextStyle? titleStyle, // Add title style parameter
     bool? showControlsOnInitialize,
     Widget Function(BuildContext context, String? errorMessage)? errorBuilder,
     bool? allowedScreenSleep,
@@ -251,6 +261,8 @@ class BetterPlayerConfiguration {
       downloadFunction: downloadFunction ?? this.downloadFunction,
       downloadButtonPosition:
           downloadButtonPosition ?? this.downloadButtonPosition,
+      title: title ?? this.title, // Add title parameter
+      titleStyle: titleStyle ?? this.titleStyle, // Add title style parameter
     );
   }
 }

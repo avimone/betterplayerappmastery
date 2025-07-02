@@ -573,9 +573,33 @@ class _BetterPlayerCupertinoControlsState
             buttonPadding,
           ),
 
-          const Spacer(),
+          // Title widget - positioned after control buttons but before spacer
+          if (config.title != null) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              child: AnimatedOpacity(
+                opacity: controlsNotVisible ? 0.0 : 1.0,
+                duration: _controlsConfiguration.controlsHideTime,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text(
+                    config.title!,
+                    style: config.titleStyle ??
+                        TextStyle(
+                          color: _controlsConfiguration.textColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
+          ] else
+            const Spacer(),
 
-          // Download widget on the right
+          // Right side controls
           if (config.downloadButtonPosition == DownloadButtonPosition.topRight)
             _buildDownloadWidget(
               backgroundColor,

@@ -233,7 +233,9 @@ class _BetterPlayerMaterialControlsState
             config.downloadButtonPosition == DownloadButtonPosition.topRight;
 
     return Container(
-      child: (_controlsConfiguration.enableOverflowMenu || showDownloadInTopBar)
+      child: (_controlsConfiguration.enableOverflowMenu ||
+              showDownloadInTopBar ||
+              config.title != null)
           ? AnimatedOpacity(
               opacity: controlsNotVisible ? 0.0 : 1.0,
               duration: _controlsConfiguration.controlsHideTime,
@@ -245,12 +247,34 @@ class _BetterPlayerMaterialControlsState
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Left side controls
-                    Row(
-                      children: [
-                        if (config.downloadButtonPosition ==
-                            DownloadButtonPosition.topLeft)
-                          _buildDownloadWidget(),
-                      ],
+                    Expanded(
+                      child: Row(
+                        children: [
+                          // Title widget
+                          if (config.title != null) ...[
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                config.title!,
+                                style: config.titleStyle ??
+                                    TextStyle(
+                                      color: _controlsConfiguration.textColor,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+
+                          // Download widget in top left
+                          if (config.downloadButtonPosition ==
+                              DownloadButtonPosition.topLeft)
+                            _buildDownloadWidget(),
+                        ],
+                      ),
                     ),
 
                     // Right side controls
