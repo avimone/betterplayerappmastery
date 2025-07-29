@@ -284,7 +284,7 @@ class _BetterPlayerMaterialControlsState
                         if (config.downloadButtonPosition ==
                             DownloadButtonPosition.topRight)
                           _buildDownloadWidget(),
-                        //  _buildPipButton(),
+                        _buildPipButton(),
                         _buildVideoTracksButton(),
                         _buildMoreButton(),
                         _buildBackButton(),
