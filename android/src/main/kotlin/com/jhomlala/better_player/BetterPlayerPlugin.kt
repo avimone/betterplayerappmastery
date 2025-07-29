@@ -418,15 +418,14 @@ private fun enablePictureInPicture(player: BetterPlayer) {
             // Setup media session for better PiP controls
             player.setupMediaSession(flutterState!!.applicationContext)
             
-            // Create PiP params with proper aspect ratio for all video formats
-            // Calculate aspect ratio from video dimensions if available
-            val aspectRatio = calculateVideoAspectRatio(player) ?: Rational(16, 9)
+            // Use safe default aspect ratio (16:9) that works for all video formats
+            val aspectRatio = Rational(16, 9)
             val pipParamsBuilder = PictureInPictureParams.Builder()
                 .setAspectRatio(aspectRatio)
             
             // Add better controls for Android 8.1+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                val actions = createPipActions(player)
+                val actions = createPipActions()
                 pipParamsBuilder.setActions(actions)
             }
             
@@ -457,28 +456,7 @@ private fun enablePictureInPicture(player: BetterPlayer) {
         }
     }
 }
-private fun calculateVideoAspectRatio(player: BetterPlayer): Rational? {
-    return try {
-        // Try to get video dimensions from the player
-        val videoWidth = player.getVideoWidth()
-        val videoHeight = player.getVideoHeight()
-        
-        if (videoWidth > 0 && videoHeight > 0) {
-            // Ensure aspect ratio is within Android's supported range (0.418 to 2.39)
-            val ratio = videoWidth.toFloat() / videoHeight.toFloat()
-            when {
-                ratio < 0.418f -> Rational(418, 1000) // Minimum supported ratio
-                ratio > 2.39f -> Rational(239, 100)   // Maximum supported ratio
-                else -> Rational(videoWidth, videoHeight)
-            }
-        } else {
-            null
-        }
-    } catch (e: Exception) {
-        Log.w(TAG, "Could not calculate video aspect ratio", e)
-        null
-    }
-}
+
 private fun disablePictureInPicture(player: BetterPlayer) {
     try {
         stopPipHandler()
@@ -502,9 +480,9 @@ private fun startPictureInPictureListenerTimer(player: BetterPlayer) {
             override fun run() {
                 try {
                     if (activity != null && activity!!.isInPictureInPictureMode) {
-                        // Update PiP actions if video state changed
+                        // Update PiP actions periodically if needed
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                            updatePipActions(player)
+                            updatePipActions()
                         }
                         pipHandler!!.postDelayed(this, 500) // Check every 500ms
                     } else {
@@ -525,13 +503,14 @@ private fun startPictureInPictureListenerTimer(player: BetterPlayer) {
 }
 
 @RequiresApi(Build.VERSION_CODES.O_MR1)
-private fun updatePipActions(player: BetterPlayer) {
+private fun updatePipActions() {
     try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val aspectRatio = calculateVideoAspectRatio(player) ?: Rational(16, 9)
+            // Use safe default aspect ratio
+            val aspectRatio = Rational(16, 9)
             val pipParamsBuilder = PictureInPictureParams.Builder()
                 .setAspectRatio(aspectRatio)
-                .setActions(createPipActions(player))
+                .setActions(createPipActions())
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 pipParamsBuilder.setSeamlessResizeEnabled(true)
@@ -545,62 +524,24 @@ private fun updatePipActions(player: BetterPlayer) {
 }
 
 @RequiresApi(Build.VERSION_CODES.O_MR1)
-private fun createPipActions(player: BetterPlayer): List<RemoteAction> {
+private fun createPipActions(): List<RemoteAction> {
     val actions = ArrayList<RemoteAction>()
     
-    // Play/Pause action - dynamically updates based on current state
-    val isPlaying = player.isPlaying()
+    // Simple Play/Pause action without checking player state
     val playPauseIntent = Intent("BETTER_PLAYER_PIP_CONTROL")
         .putExtra("action", "play_pause")
-        .putExtra("textureId", player.getTextureId())
     val playPausePendingIntent = PendingIntent.getBroadcast(
         activity!!, 0, playPauseIntent, 
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
     
     val playPauseAction = RemoteAction(
-        Icon.createWithResource(
-            activity!!, 
-            if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
-        ),
-        if (isPlaying) "Pause" else "Play",
-        if (isPlaying) "Pause the video" else "Play the video",
+        Icon.createWithResource(activity!!, android.R.drawable.ic_media_play),
+        "Play/Pause",
+        "Play or pause the video",
         playPausePendingIntent
     )
     actions.add(playPauseAction)
-    
-    // Previous/Next actions for playlist support (if needed)
-    if (player.hasPlaylist()) {
-        // Previous action
-        val prevIntent = Intent("BETTER_PLAYER_PIP_CONTROL")
-            .putExtra("action", "previous")
-            .putExtra("textureId", player.getTextureId())
-        val prevPendingIntent = PendingIntent.getBroadcast(
-            activity!!, 1, prevIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val prevAction = RemoteAction(
-            Icon.createWithResource(activity!!, android.R.drawable.ic_media_previous),
-            "Previous", "Play previous video",
-            prevPendingIntent
-        )
-        actions.add(prevAction)
-        
-        // Next action
-        val nextIntent = Intent("BETTER_PLAYER_PIP_CONTROL")
-            .putExtra("action", "next")
-            .putExtra("textureId", player.getTextureId())
-        val nextPendingIntent = PendingIntent.getBroadcast(
-            activity!!, 2, nextIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val nextAction = RemoteAction(
-            Icon.createWithResource(activity!!, android.R.drawable.ic_media_next),
-            "Next", "Play next video",
-            nextPendingIntent
-        )
-        actions.add(nextAction)
-    }
     
     return actions
 }
@@ -611,13 +552,13 @@ private fun createPipActions(player: BetterPlayer): List<RemoteAction> {
         stopPipHandler()
     }
 
-    private fun stopPipHandler() {
-        if (pipHandler != null) {
-            pipHandler!!.removeCallbacksAndMessages(null)
-            pipHandler = null
-        }
-        pipRunnable = null
+private fun stopPipHandler() {
+    if (pipHandler != null) {
+        pipHandler!!.removeCallbacksAndMessages(null)
+        pipHandler = null
     }
+    pipRunnable = null
+}
 
     private interface KeyForAssetFn {
         operator fun get(asset: String?): String
