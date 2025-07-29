@@ -284,7 +284,7 @@ class _BetterPlayerMaterialControlsState
                         if (config.downloadButtonPosition ==
                             DownloadButtonPosition.topRight)
                           _buildDownloadWidget(),
-                        //  _buildPipButton(),
+                        _buildPipButton(),
                         _buildVideoTracksButton(),
                         _buildMoreButton(),
                         _buildBackButton(),
@@ -299,17 +299,19 @@ class _BetterPlayerMaterialControlsState
   }
 
   Widget _buildPipButton() {
+    if (!_controlsConfiguration.enablePip) {
+      return const SizedBox();
+    }
+
     return BetterPlayerMaterialClickableWidget(
       onTap: () {
-        /*   betterPlayerController!.enablePictureInPicture(
-            betterPlayerController!.betterPlayerGlobalKey!); */
-        betterPlayerController!.betterPlayerConfiguration!.pip!();
+        _onPipButtonPressed();
       },
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Icon(
-          betterPlayerControlsConfiguration.pipMenuIcon,
-          color: betterPlayerControlsConfiguration.iconsColor,
+          _controlsConfiguration.pipMenuIcon,
+          color: _controlsConfiguration.iconsColor,
           size: _controlsConfiguration.iconSize,
         ),
       ),
@@ -375,18 +377,22 @@ class _BetterPlayerMaterialControlsState
 
   Widget _buildPipButtonWrapperWidget(
       bool hideStuff, void Function() onPlayerHide) {
+    if (!_controlsConfiguration.enablePip) {
+      return const SizedBox();
+    }
+
     return FutureBuilder<bool>(
-      future: betterPlayerController!.isPictureInPictureSupported(),
+      future: _betterPlayerController!.isPictureInPictureSupported(),
       builder: (context, snapshot) {
         final bool isPipSupported = snapshot.data ?? false;
         if (isPipSupported &&
             _betterPlayerController!.betterPlayerGlobalKey != null) {
           return AnimatedOpacity(
             opacity: hideStuff ? 0.0 : 1.0,
-            duration: betterPlayerControlsConfiguration.controlsHideTime,
+            duration: _controlsConfiguration.controlsHideTime,
             onEnd: onPlayerHide,
             child: Container(
-              height: betterPlayerControlsConfiguration.controlBarHeight,
+              height: _controlsConfiguration.controlBarHeight,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -400,6 +406,35 @@ class _BetterPlayerMaterialControlsState
         }
       },
     );
+  }
+
+  ///Handle PiP button press - now using built-in functionality instead of passed function
+  void _onPipButtonPressed() async {
+    if (_betterPlayerController?.betterPlayerGlobalKey != null) {
+      try {
+        await _betterPlayerController!.enablePictureInPicture(
+            _betterPlayerController!.betterPlayerGlobalKey!);
+      } catch (e) {
+        BetterPlayerUtils.log("Failed to enable Picture in Picture: $e");
+        // Optionally show user-friendly error message
+        _showPipErrorSnackbar();
+      }
+    } else {
+      BetterPlayerUtils.log("Cannot enable PiP: Global key not set");
+    }
+  }
+
+  void _showPipErrorSnackbar() {
+    final context =
+        _betterPlayerController?.betterPlayerGlobalKey?.currentContext;
+    if (context != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Picture in Picture not available on this device'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   Widget _buildMoreButton() {

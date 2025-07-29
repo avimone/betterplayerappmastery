@@ -2,10 +2,43 @@ import 'package:better_player/better_player.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
+/// Configuration for Picture in Picture functionality
+class BetterPlayerPipConfiguration {
+  /// Enable/disable Picture in Picture functionality
+  final bool enabled;
+
+  /// Icon to display for PiP button
+  final IconData icon;
+
+  /// Whether to auto-enter PiP when user leaves app (Android 12+)
+  final bool autoEnterOnUserLeaveHint;
+
+  /// Custom aspect ratio for PiP window (Android)
+  final double? aspectRatio;
+
+  /// Enable seamless resize during PiP transition (iOS 15+)
+  final bool enableSeamlessResize;
+
+  /// Enable PiP in fullscreen mode (now supported!)
+  final bool enableInFullscreen;
+
+  const BetterPlayerPipConfiguration({
+    this.enabled = true,
+    this.icon = Icons.picture_in_picture_outlined,
+    this.autoEnterOnUserLeaveHint = false,
+    this.aspectRatio,
+    this.enableSeamlessResize = true,
+    this.enableInFullscreen = true, // NEW: PiP now works in fullscreen
+  });
+}
+
 ///UI configuration of Better Player. Allows to change colors/icons/behavior
 ///of controls. Used in BetterPlayerConfiguration. Configuration applies only
 ///for player displayed in app, not in notification or PiP mode.
 class BetterPlayerControlsConfiguration {
+  /// Picture in Picture configuration
+  final BetterPlayerPipConfiguration pipConfiguration;
+
   ///Color of the control bars
   final Color controlBarColor;
 
@@ -226,6 +259,8 @@ class BetterPlayerControlsConfiguration {
     this.backgroundColor = Colors.black,
     this.overflowModalColor = Colors.white,
     this.overflowModalTextColor = Colors.black,
+    this.pipConfiguration =
+        const BetterPlayerPipConfiguration(), // Add with default value
   });
 
   factory BetterPlayerControlsConfiguration.white() {

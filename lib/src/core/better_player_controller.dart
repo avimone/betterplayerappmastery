@@ -211,6 +211,9 @@ class BetterPlayerController {
   ///Currently displayed [BetterPlayerSubtitle].
   BetterPlayerSubtitle? renderedSubtitle;
 
+// Add this field to track fullscreen state before PiP
+  bool _wasInFullscreenBeforePip = false;
+
   BetterPlayerController(
     this.betterPlayerConfiguration, {
     this.betterPlayerPlaylistConfiguration,
@@ -1082,42 +1085,38 @@ class BetterPlayerController {
     return _overriddenFit ?? betterPlayerConfiguration.fit;
   }
 
-  ///Enable Picture in Picture (PiP) mode. [betterPlayerGlobalKey] is required
-  ///to open PiP mode in iOS. When device is not supported, PiP mode won't be
-  ///open.
-  Future<void>? enablePictureInPicture(GlobalKey betterPlayerGlobalKey) async {
+  ///Enable Picture in Picture mode. Requires a global key of BetterPlayer widget.
+  ///Supported on iOS 14.0+ and Android 8.0+ with sufficient system requirements.
+  ///Works with all video formats including HLS/m3u8.
+  ///Now supports PiP activation from both normal and fullscreen modes.
+  Future<void> enablePictureInPicture(GlobalKey betterPlayerGlobalKey) async {
     if (videoPlayerController == null) {
       throw StateError("The data source has not been initialized");
     }
 
-    final bool isPipSupported =
-        (await videoPlayerController!.isPictureInPictureSupported()) ?? false;
+    _betterPlayerGlobalKey = betterPlayerGlobalKey;
 
+    final bool isPipSupported = await isPictureInPictureSupported();
     if (isPipSupported) {
-      _wasInFullScreenBeforePiP = _isFullScreen;
-      _wasControlsEnabledBeforePiP = _controlsEnabled;
-      setControlsEnabled(false);
       if (Platform.isAndroid) {
-        _wasInFullScreenBeforePiP = _isFullScreen;
-        await videoPlayerController?.enablePictureInPicture(
-            left: 0, top: 0, width: 0, height: 0);
-        /*   if (betterPlayerConfiguration.pip != null) {
-          betterPlayerConfiguration.pip!();
-        } */
-        enterFullScreen();
+        // Android implementation - supports PiP from any mode
         _postEvent(BetterPlayerEvent(BetterPlayerEventType.pipStart));
-        return;
+        return videoPlayerController?.enablePictureInPicture();
       }
+
       if (Platform.isIOS) {
+        // iOS implementation for both iPhone and iPad - supports PiP from any mode
         final RenderBox? renderBox = betterPlayerGlobalKey.currentContext!
             .findRenderObject() as RenderBox?;
         if (renderBox == null) {
           BetterPlayerUtils.log(
-              "Can't show PiP. RenderBox is null. Did you provide valid global"
-              " key?");
+              "Can't show PiP. RenderBox is null. Did you provide valid global key?");
           return;
         }
+
         final Offset position = renderBox.localToGlobal(Offset.zero);
+        _postEvent(BetterPlayerEvent(BetterPlayerEventType.pipStart));
+
         return videoPlayerController?.enablePictureInPicture(
           left: position.dx,
           top: position.dy,
@@ -1129,9 +1128,8 @@ class BetterPlayerController {
       }
     } else {
       BetterPlayerUtils.log(
-          "Picture in picture is not supported in this device. If you're "
-          "using Android, please check if you're using activity v2 "
-          "embedding.");
+          "Picture in picture is not supported in this device. "
+          "Requirements: iOS 14.0+ or Android 8.0+ with sufficient RAM and v2 embedding.");
     }
   }
 
@@ -1140,6 +1138,8 @@ class BetterPlayerController {
     if (videoPlayerController == null) {
       throw StateError("The data source has not been initialized");
     }
+
+    _postEvent(BetterPlayerEvent(BetterPlayerEventType.pipStop));
     return videoPlayerController!.disablePictureInPicture();
   }
 
@@ -1150,15 +1150,39 @@ class BetterPlayerController {
   }
 
   ///Check if picture in picture mode is supported in this device.
+  ///Now supports PiP in both normal and fullscreen modes.
   Future<bool> isPictureInPictureSupported() async {
     if (videoPlayerController == null) {
-      throw StateError("The data source has not been initialized");
+      return false;
     }
 
     final bool isPipSupported =
         (await videoPlayerController!.isPictureInPictureSupported()) ?? false;
 
-    return isPipSupported && !_isFullScreen;
+    // PiP is now supported in both fullscreen and normal modes
+    return isPipSupported;
+  }
+
+  ///Enhanced method to handle PiP state changes and cleanup
+  ///Now properly handles fullscreen transitions when PiP is enabled/disabled
+  void _handlePictureInPictureStateChange(bool isInPip) {
+    if (isInPip) {
+      // Store current fullscreen state before entering PiP
+      _wasInFullscreenBeforePip = _isFullScreen;
+      _postEvent(BetterPlayerEvent(BetterPlayerEventType.pipStart));
+    } else {
+      _postEvent(BetterPlayerEvent(BetterPlayerEventType.pipStop));
+
+      // On Android, handle fullscreen state restoration based on previous state
+      if (Platform.isAndroid) {
+        // If PiP was started from normal mode and we want to return to normal mode
+        if (!_wasInFullscreenBeforePip && _isFullScreen) {
+          exitFullScreen();
+        }
+        // If PiP was started from fullscreen mode, remain in fullscreen
+        // This preserves user's original viewing preference
+      }
+    }
   }
 
   ///Handle VideoEvent when remote controls notification / PiP is shown

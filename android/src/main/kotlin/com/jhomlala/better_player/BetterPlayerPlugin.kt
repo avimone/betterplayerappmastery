@@ -27,6 +27,12 @@ import io.flutter.view.TextureRegistry
 import java.lang.Exception
 import java.util.HashMap
 
+import android.content.Intent
+import android.graphics.drawable.Icon
+import android.app.RemoteAction
+import android.app.PendingIntent
+import android.util.Rational
+import androidx.annotation.RequiresApi
 /**
  * Android platform implementation of the VideoPlayerPlugin.
  */
@@ -406,38 +412,139 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             .hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
     }
 
-    private fun enablePictureInPicture(player: BetterPlayer) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+private fun enablePictureInPicture(player: BetterPlayer) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        try {
+            // Setup media session for better PiP controls
             player.setupMediaSession(flutterState!!.applicationContext)
-            activity!!.enterPictureInPictureMode(PictureInPictureParams.Builder().build())
-            startPictureInPictureListenerTimer(player)
-            player.onPictureInPictureStatusChanged(true)
+            
+            // Use safe default aspect ratio (16:9) that works for all video formats
+            val aspectRatio = Rational(16, 9)
+            val pipParamsBuilder = PictureInPictureParams.Builder()
+                .setAspectRatio(aspectRatio)
+            
+            // Add better controls for Android 8.1+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                val actions = createPipActions()
+                pipParamsBuilder.setActions(actions)
+            }
+            
+            // Enable auto-enter PiP on user leave hint for Android 12+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                pipParamsBuilder.setAutoEnterEnabled(true)
+            }
+            
+            // Support seamless resize for better transition from fullscreen
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                pipParamsBuilder.setSeamlessResizeEnabled(true)
+            }
+            
+            val pipParams = pipParamsBuilder.build()
+            val result = activity!!.enterPictureInPictureMode(pipParams)
+            
+            if (result) {
+                startPictureInPictureListenerTimer(player)
+                player.onPictureInPictureStatusChanged(true)
+                Log.d(TAG, "Successfully entered Picture in Picture mode")
+            } else {
+                Log.w(TAG, "Failed to enter Picture in Picture mode")
+                player.onPictureInPictureStatusChanged(false)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error enabling Picture in Picture", e)
+            player.onPictureInPictureStatusChanged(false)
         }
     }
+}
 
-    private fun disablePictureInPicture(player: BetterPlayer) {
+private fun disablePictureInPicture(player: BetterPlayer) {
+    try {
         stopPipHandler()
-        activity!!.moveTaskToBack(false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && 
+            activity!!.isInPictureInPictureMode) {
+            activity!!.moveTaskToBack(false)
+        }
         player.onPictureInPictureStatusChanged(false)
         player.disposeMediaSession()
+        Log.d(TAG, "Disabled Picture in Picture mode")
+    } catch (e: Exception) {
+        Log.e(TAG, "Error disabling Picture in Picture", e)
     }
+}
 
-    private fun startPictureInPictureListenerTimer(player: BetterPlayer) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            pipHandler = Handler(Looper.getMainLooper())
-            pipRunnable = Runnable {
-                if (activity!!.isInPictureInPictureMode) {
-                    pipHandler!!.postDelayed(pipRunnable!!, 100)
-                } else {
-                    player.onPictureInPictureStatusChanged(false)
-                    player.disposeMediaSession()
+// Enhanced PiP listener with better fullscreen handling
+private fun startPictureInPictureListenerTimer(player: BetterPlayer) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        pipHandler = Handler(Looper.getMainLooper())
+        pipRunnable = object : Runnable {
+            override fun run() {
+                try {
+                    if (activity != null && activity!!.isInPictureInPictureMode) {
+                        // Update PiP actions periodically if needed
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                            updatePipActions()
+                        }
+                        pipHandler!!.postDelayed(this, 500) // Check every 500ms
+                    } else {
+                        // PiP mode ended
+                        player.onPictureInPictureStatusChanged(false)
+                        player.disposeMediaSession()
+                        stopPipHandler()
+                        Log.d(TAG, "Exited Picture in Picture mode")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in PiP listener", e)
                     stopPipHandler()
                 }
             }
-            pipHandler!!.post(pipRunnable!!)
         }
+        pipHandler!!.post(pipRunnable!!)
     }
+}
 
+@RequiresApi(Build.VERSION_CODES.O_MR1)
+private fun updatePipActions() {
+    try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Use safe default aspect ratio
+            val aspectRatio = Rational(16, 9)
+            val pipParamsBuilder = PictureInPictureParams.Builder()
+                .setAspectRatio(aspectRatio)
+                .setActions(createPipActions())
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                pipParamsBuilder.setSeamlessResizeEnabled(true)
+            }
+            
+            activity!!.setPictureInPictureParams(pipParamsBuilder.build())
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "Could not update PiP actions", e)
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.O_MR1)
+private fun createPipActions(): List<RemoteAction> {
+    val actions = ArrayList<RemoteAction>()
+    
+    // Simple Play/Pause action without checking player state
+    val playPauseIntent = Intent("BETTER_PLAYER_PIP_CONTROL")
+        .putExtra("action", "play_pause")
+    val playPausePendingIntent = PendingIntent.getBroadcast(
+        activity!!, 0, playPauseIntent, 
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    
+    val playPauseAction = RemoteAction(
+        Icon.createWithResource(activity!!, android.R.drawable.ic_media_play),
+        "Play/Pause",
+        "Play or pause the video",
+        playPausePendingIntent
+    )
+    actions.add(playPauseAction)
+    
+    return actions
+}
     private fun dispose(player: BetterPlayer, textureId: Long) {
         player.dispose()
         videoPlayers.remove(textureId)
@@ -445,13 +552,13 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         stopPipHandler()
     }
 
-    private fun stopPipHandler() {
-        if (pipHandler != null) {
-            pipHandler!!.removeCallbacksAndMessages(null)
-            pipHandler = null
-        }
-        pipRunnable = null
+private fun stopPipHandler() {
+    if (pipHandler != null) {
+        pipHandler!!.removeCallbacksAndMessages(null)
+        pipHandler = null
     }
+    pipRunnable = null
+}
 
     private interface KeyForAssetFn {
         operator fun get(asset: String?): String
