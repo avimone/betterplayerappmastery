@@ -223,7 +223,9 @@ class _BetterPlayerCupertinoControlsState
     double buttonPadding,
   ) {
     return GestureDetector(
-      onTap: _onExpandCollapse,
+      onTap: _controlsConfiguration.fullScreenButtonExit
+          ? _onFullScreenButtonExit // 🚀 NEW: Exit player behavior
+          : _onExpandCollapse, // ✅ EXISTING: Toggle fullscreen behavior
       child: AnimatedOpacity(
         opacity: controlsNotVisible ? 0.0 : 1.0,
         duration: _controlsConfiguration.controlsHideTime,
@@ -865,6 +867,18 @@ class _BetterPlayerCupertinoControlsState
         cancelAndRestartTimer();
       }
     });
+  }
+
+// Handle fullscreen button exit behavior for Cupertino
+  void _onFullScreenButtonExit() {
+    // When fullScreenButtonExit is true, behave like the exit button
+    _betterPlayerController!.exitPlayer();
+    if (_betterPlayerController!.isFullScreen) {
+      Navigator.of(context).pop();
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   void _onExpandCollapse() {

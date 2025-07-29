@@ -39,6 +39,11 @@ class BetterPlayerControlsConfiguration {
   /// Picture in Picture configuration
   final BetterPlayerPipConfiguration pipConfiguration;
 
+  /// 🚀 NEW FEATURE: When true, fullscreen exit button will exit the player entirely (like back button)
+  /// When false, it will only toggle fullscreen mode (default behavior)
+  /// This solves PiP exit issues where users want to stay in the player after exiting fullscreen
+  final bool fullScreenButtonExit;
+
   ///Color of the control bars
   final Color controlBarColor;
 
@@ -261,6 +266,8 @@ class BetterPlayerControlsConfiguration {
     this.overflowModalTextColor = Colors.black,
     this.pipConfiguration =
         const BetterPlayerPipConfiguration(), // Add with default value
+    this.fullScreenButtonExit =
+        false, // 🚀 NEW: Default to normal fullscreen behavior
   });
 
   factory BetterPlayerControlsConfiguration.white() {
