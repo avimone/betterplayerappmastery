@@ -536,7 +536,9 @@ class _BetterPlayerMaterialControlsState
     return Padding(
       padding: EdgeInsets.only(right: 12.0),
       child: BetterPlayerMaterialClickableWidget(
-        onTap: _onExpandCollapse,
+        onTap: _controlsConfiguration.fullScreenButtonExit
+            ? _onFullScreenButtonExit // 🚀 NEW: Exit player behavior
+            : _onExpandCollapse, // ✅ EXISTING: Toggle fullscreen behavior
         child: AnimatedOpacity(
           opacity: controlsNotVisible ? 0.0 : 1.0,
           duration: _controlsConfiguration.controlsHideTime,
@@ -847,6 +849,18 @@ class _BetterPlayerMaterialControlsState
         cancelAndRestartTimer();
       });
     });
+  }
+
+  // Handle fullscreen button exit behavior
+  void _onFullScreenButtonExit() {
+    // When fullScreenButtonExit is true, behave like the back button
+    _betterPlayerController!.exitPlayer();
+    if (_betterPlayerController!.isFullScreen) {
+      Navigator.of(context).pop();
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   void _onPlayPause() {
