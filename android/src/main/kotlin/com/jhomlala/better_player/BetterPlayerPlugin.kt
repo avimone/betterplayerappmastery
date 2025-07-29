@@ -27,6 +27,12 @@ import io.flutter.view.TextureRegistry
 import java.lang.Exception
 import java.util.HashMap
 
+import android.content.Intent
+import android.graphics.drawable.Icon
+import android.app.RemoteAction
+import android.app.PendingIntent
+import android.util.Rational
+import androidx.annotation.RequiresApi
 /**
  * Android platform implementation of the VideoPlayerPlugin.
  */
