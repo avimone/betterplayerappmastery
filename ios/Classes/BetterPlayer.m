@@ -612,43 +612,97 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)setupPipController {
     if (@available(iOS 9.0, *)) {
-        [[AVAudioSession sharedInstance] setActive: YES error: nil];
-        [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
-        if (!_pipController && self._playerLayer && [AVPictureInPictureController isPictureInPictureSupported]) {
-            _pipController = [[AVPictureInPictureController alloc] initWithPlayerLayer:self._playerLayer];
-            _pipController.delegate = self;
+        @try {
+            [[AVAudioSession sharedInstance] setActive: YES error: nil];
+            [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
+            
+            if (!_pipController && self._playerLayer && 
+                [AVPictureInPictureController isPictureInPictureSupported]) {
+                _pipController = [[AVPictureInPictureController alloc] 
+                                 initWithPlayerLayer:self._playerLayer];
+                _pipController.delegate = self;
+                
+                // Enable automatic PiP for supported devices (iOS 14.2+)
+                if (@available(iOS 14.2, *)) {
+                    _pipController.canStartPictureInPictureAutomaticallyFromInline = YES;
+                }
+                
+                // Enable requires linear playback (iOS 14.0+) for better HLS support
+                if (@available(iOS 14.0, *)) {
+                    _pipController.requiresLinearPlayback = NO; // Allow seeking in PiP
+                }
+            }
+        } @catch (NSException *exception) {
+            NSLog(@"Error setting up PiP controller: %@", exception.reason);
         }
-    } else {
-        // Fallback on earlier versions
     }
 }
 
-- (void) enablePictureInPicture: (CGRect) frame{
-    [self disablePictureInPicture];
-    [self usePlayerLayer:frame];
-}
-
-- (void)usePlayerLayer: (CGRect) frame
-{
-    if( _player )
-    {
-        // Create new controller passing reference to the AVPlayerLayer
-        self._playerLayer = [AVPlayerLayer playerLayerWithPlayer:_player];
-        UIViewController* vc = [[[UIApplication sharedApplication] keyWindow] rootViewController];
-        self._playerLayer.frame = frame;
-        self._playerLayer.needsDisplayOnBoundsChange = YES;
-        //  [self._playerLayer addObserver:self forKeyPath:readyForDisplayKeyPath options:NSKeyValueObservingOptionNew context:nil];
-        [vc.view.layer addSublayer:self._playerLayer];
-        vc.view.layer.needsDisplayOnBoundsChange = YES;
+- (void) enablePictureInPicture: (CGRect) frame {
+    @try {
+        [self disablePictureInPicture];
+        
+        // Handle fullscreen mode properly - don't exit fullscreen
+        // PiP can work from both normal and fullscreen modes
         if (@available(iOS 9.0, *)) {
-            _pipController = NULL;
+            [self usePlayerLayer:frame];
         }
-        [self setupPipController];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-            [self setPictureInPicture:true];
-        });
+    } @catch (NSException *exception) {
+        NSLog(@"Error enabling PiP: %@", exception.reason);
+        if (_eventSink != nil) {
+            _eventSink(@{@"event" : @"pipError", @"error": exception.reason});
+        }
     }
+}
+
+- (void)usePlayerLayer: (CGRect) frame {
+    if (_player) {
+        @try {
+            // Create new controller passing reference to the AVPlayerLayer
+            self._playerLayer = [AVPlayerLayer playerLayerWithPlayer:_player];
+            UIViewController* vc = [[[UIApplication sharedApplication] keyWindow] rootViewController];
+            
+            // Handle different orientations and screen sizes (including iPad)
+            CGRect adjustedFrame = [self adjustFrameForCurrentOrientation:frame];
+            self._playerLayer.frame = adjustedFrame;
+            self._playerLayer.needsDisplayOnBoundsChange = YES;
+            
+            // Ensure proper video scaling for PiP
+            self._playerLayer.videoGravity = AVLayerVideoGravityResizeAspect;
+            
+            [vc.view.layer addSublayer:self._playerLayer];
+            vc.view.layer.needsDisplayOnBoundsChange = YES;
+            
+            // Reset PiP controller
+            if (@available(iOS 9.0, *)) {
+                _pipController = NULL;
+            }
+            [self setupPipController];
+            
+            // Delay to ensure proper setup, especially important for fullscreen transitions
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                [self setPictureInPicture:true];
+            });
+        } @catch (NSException *exception) {
+            NSLog(@"Error setting up player layer: %@", exception.reason);
+        }
+    }
+}
+
+- (CGRect)adjustFrameForCurrentOrientation:(CGRect)originalFrame {
+    // Handle orientation changes and different device types (iPhone/iPad)
+    UIViewController* vc = [[[UIApplication sharedApplication] keyWindow] rootViewController];
+    CGRect bounds = vc.view.bounds;
+    
+    // For fullscreen or landscape mode, use the full bounds
+    if (originalFrame.size.width >= bounds.size.width * 0.8 || 
+        originalFrame.size.height >= bounds.size.height * 0.8) {
+        return bounds;
+    }
+    
+    // For normal mode, use the provided frame
+    return originalFrame;
 }
 
 - (void)disablePictureInPicture
@@ -665,11 +719,12 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 #endif
 
 #if TARGET_OS_IOS
-- (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController  API_AVAILABLE(ios(9.0)){
+- (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(ios(9.0)) {
     [self disablePictureInPicture];
 }
 
-- (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController  API_AVAILABLE(ios(9.0)){
+// Enhanced delegate methods with better error handling
+- (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(ios(9.0)) {
     if (_eventSink != nil) {
         _eventSink(@{@"event" : @"pipStart"});
     }
@@ -683,12 +738,18 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
 }
 
-- (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController failedToStartPictureInPictureWithError:(NSError *)error {
-
+- (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController 
+           failedToStartPictureInPictureWithError:(NSError *)error API_AVAILABLE(ios(9.0)) {
+    NSLog(@"PiP failed to start: %@", error.localizedDescription);
+    if (_eventSink != nil) {
+        _eventSink(@{@"event" : @"pipError", @"error": error.localizedDescription});
+    }
 }
 
-- (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:(void (^)(BOOL))completionHandler {
-    [self setRestoreUserInterfaceForPIPStopCompletionHandler: true];
+- (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController 
+restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:(void (^)(BOOL))completionHandler API_AVAILABLE(ios(9.0)) {
+    [self setRestoreUserInterfaceForPIPStopCompletionHandler: YES];
+    completionHandler(YES);
 }
 
 - (void) setAudioTrack:(NSString*) name index:(int) index{

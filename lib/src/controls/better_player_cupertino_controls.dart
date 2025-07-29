@@ -1021,6 +1021,10 @@ class _BetterPlayerCupertinoControlsState
     double iconSize,
     double buttonPadding,
   ) {
+    if (!_controlsConfiguration.enablePip) {
+      return const SizedBox();
+    }
+
     return FutureBuilder<bool>(
       future: _betterPlayerController!.isPictureInPictureSupported(),
       builder: (context, snapshot) {
@@ -1029,8 +1033,7 @@ class _BetterPlayerCupertinoControlsState
             _betterPlayerController!.betterPlayerGlobalKey != null) {
           return GestureDetector(
             onTap: () {
-              betterPlayerController!.enablePictureInPicture(
-                  betterPlayerController!.betterPlayerGlobalKey!);
+              _onCupertinoPipButtonPressed();
             },
             child: AnimatedOpacity(
               opacity: controlsNotVisible ? 0.0 : 1.0,
@@ -1062,5 +1065,40 @@ class _BetterPlayerCupertinoControlsState
         }
       },
     );
+  }
+
+  ///Enhanced Cupertino PiP button handler with error handling
+  void _onCupertinoPipButtonPressed() async {
+    if (_betterPlayerController?.betterPlayerGlobalKey != null) {
+      try {
+        await _betterPlayerController!.enablePictureInPicture(
+            _betterPlayerController!.betterPlayerGlobalKey!);
+      } catch (e) {
+        BetterPlayerUtils.log("Failed to enable Picture in Picture: $e");
+        _showCupertinoPipErrorDialog();
+      }
+    } else {
+      BetterPlayerUtils.log("Cannot enable PiP: Global key not set");
+    }
+  }
+
+  void _showCupertinoPipErrorDialog() {
+    final context =
+        _betterPlayerController?.betterPlayerGlobalKey?.currentContext;
+    if (context != null) {
+      showCupertinoDialog(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          title: Text('Picture in Picture'),
+          content: Text('Picture in Picture is not available on this device.'),
+          actions: [
+            CupertinoDialogAction(
+              child: Text('OK'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
+      );
+    }
   }
 }
