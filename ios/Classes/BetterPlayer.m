@@ -642,8 +642,12 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     @try {
         [self disablePictureInPicture];
         
-        // Handle fullscreen mode properly - don't exit fullscreen
-        // PiP can work from both normal and fullscreen modes
+        // NEW: Get reference to the original BetterPlayerView
+        BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
+        
+        // NEW: Hide the original player layer to prevent dual playback
+        originalPlayerView.playerLayer.hidden = YES;
+        
         if (@available(iOS 9.0, *)) {
             [self usePlayerLayer:frame];
         }
@@ -705,26 +709,40 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     return originalFrame;
 }
 
-- (void)disablePictureInPicture
-{
-    [self setPictureInPicture:true];
-    if (__playerLayer){
-        [self._playerLayer removeFromSuperlayer];
-        self._playerLayer = nil;
-        if (_eventSink != nil) {
-            _eventSink(@{@"event" : @"pipStop"});
-        }
+- (void)disablePictureInPicture {
+    [self setPictureInPicture:false]; // Fix: should be false, not true
+    
+    if (_playerLayer) {
+        [_playerLayer removeFromSuperlayer];
+        _playerLayer = nil;
+    }
+    
+    // NEW: Show the original player layer when PiP is disabled
+    BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
+    originalPlayerView.playerLayer.hidden = NO;
+    
+    if (_eventSink != nil) {
+        _eventSink(@{@"event" : @"pipStop"});
     }
 }
+
 #endif
 
 #if TARGET_OS_IOS
 - (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(ios(9.0)) {
+    // Show original player view when PiP stops
+    BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
+    originalPlayerView.playerLayer.hidden = NO;
+    
     [self disablePictureInPicture];
 }
 
 // Enhanced delegate methods with better error handling
 - (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(ios(9.0)) {
+    // Hide original player view when PiP actually starts
+    BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
+    originalPlayerView.playerLayer.hidden = YES;
+    
     if (_eventSink != nil) {
         _eventSink(@{@"event" : @"pipStart"});
     }
@@ -748,8 +766,14 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController 
 restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:(void (^)(BOOL))completionHandler API_AVAILABLE(ios(9.0)) {
-    [self setRestoreUserInterfaceForPIPStopCompletionHandler: YES];
-    completionHandler(YES);
+    // NEW: Ensure proper restoration
+    BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
+    originalPlayerView.playerLayer.hidden = NO;
+    
+    [self setRestoreUserInterfaceForPIPStopCompletionHandler:YES];
+    if (completionHandler) {
+        completionHandler(YES);
+    }
 }
 
 - (void) setAudioTrack:(NSString*) name index:(int) index{

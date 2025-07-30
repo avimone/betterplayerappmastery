@@ -213,6 +213,8 @@ class BetterPlayerController {
 
 // Add this field to track fullscreen state before PiP
   bool _wasInFullscreenBeforePip = false;
+  bool _isPipActive = false;
+  bool get isPipActive => _isPipActive;
 
   BetterPlayerController(
     this.betterPlayerConfiguration, {
@@ -1047,14 +1049,23 @@ class BetterPlayerController {
   void setAppLifecycleState(AppLifecycleState appLifecycleState) {
     if (_isAutomaticPlayPauseHandled()) {
       _appLifecycleState = appLifecycleState;
+
+      // NEW: Don't pause video if PiP is active
+      final isPipActive = _wasInPipMode; // Add this tracking variable
+
       if (appLifecycleState == AppLifecycleState.resumed) {
-        if (_wasPlayingBeforePause == true && _isPlayerVisible) {
+        if (_wasPlayingBeforePause == true &&
+            _isPlayerVisible &&
+            !isPipActive) {
           play();
         }
       }
       if (appLifecycleState == AppLifecycleState.paused) {
-        _wasPlayingBeforePause ??= isPlaying();
-        pause();
+        // NEW: Only pause if NOT in PiP mode
+        if (!isPipActive) {
+          _wasPlayingBeforePause ??= isPlaying();
+          pause();
+        }
       }
     }
   }
@@ -1100,6 +1111,9 @@ class BetterPlayerController {
     if (isPipSupported) {
       BetterPlayerUtils.log("Hiding controls before PiP activation");
       setControlsVisibility(false);
+      // NEW: Set PiP state BEFORE enabling
+      _isPipActive = true;
+      _wasInPipMode = true;
       // Add small delay to ensure controls are fully hidden before PiP capture
       await Future.delayed(Duration(milliseconds: 100));
       if (Platform.isAndroid) {
@@ -1146,6 +1160,9 @@ class BetterPlayerController {
     if (videoPlayerController == null) {
       throw StateError("The data source has not been initialized");
     }
+    // NEW: Reset PiP state
+    _isPipActive = false;
+    _wasInPipMode = false;
     // 🚀 SOLUTION: Show controls when PiP is manually disabled
     BetterPlayerUtils.log("Showing controls after PiP disable");
     setControlsVisibility(true);

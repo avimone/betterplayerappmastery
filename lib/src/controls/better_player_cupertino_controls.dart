@@ -1085,14 +1085,17 @@ class _BetterPlayerCupertinoControlsState
   void _onCupertinoPipButtonPressed() async {
     if (_betterPlayerController?.betterPlayerGlobalKey != null) {
       try {
-        await _betterPlayerController!.enablePictureInPicture(
-            _betterPlayerController!.betterPlayerGlobalKey!);
+        // Check if already in PiP to prevent multiple activations
+        if (_betterPlayerController!.isPipActive) {
+          await _betterPlayerController!.disablePictureInPicture();
+        } else {
+          await _betterPlayerController!.enablePictureInPicture(
+              _betterPlayerController!.betterPlayerGlobalKey!);
+        }
       } catch (e) {
-        BetterPlayerUtils.log("Failed to enable Picture in Picture: $e");
+        BetterPlayerUtils.log("Failed to toggle Picture in Picture: $e");
         _showCupertinoPipErrorDialog();
       }
-    } else {
-      BetterPlayerUtils.log("Cannot enable PiP: Global key not set");
     }
   }
 
