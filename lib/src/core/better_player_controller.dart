@@ -1098,6 +1098,10 @@ class BetterPlayerController {
 
     final bool isPipSupported = await isPictureInPictureSupported();
     if (isPipSupported) {
+      BetterPlayerUtils.log("Hiding controls before PiP activation");
+      setControlsVisibility(false);
+      // Add small delay to ensure controls are fully hidden before PiP capture
+      await Future.delayed(Duration(milliseconds: 100));
       if (Platform.isAndroid) {
         // Android implementation - supports PiP from any mode
         _postEvent(BetterPlayerEvent(BetterPlayerEventType.pipStart));
@@ -1124,12 +1128,16 @@ class BetterPlayerController {
           height: renderBox.size.height,
         );
       } else {
-        BetterPlayerUtils.log("Unsupported PiP in current platform.");
+        BetterPlayerUtils.log(
+            "Unsupported PiP in current platform."); // Restore controls if platform not supported
+        setControlsVisibility(true);
       }
     } else {
       BetterPlayerUtils.log(
           "Picture in picture is not supported in this device. "
           "Requirements: iOS 14.0+ or Android 8.0+ with sufficient RAM and v2 embedding.");
+      // Restore controls if PiP not supported
+      setControlsVisibility(true);
     }
   }
 
@@ -1138,7 +1146,9 @@ class BetterPlayerController {
     if (videoPlayerController == null) {
       throw StateError("The data source has not been initialized");
     }
-
+    // 🚀 SOLUTION: Show controls when PiP is manually disabled
+    BetterPlayerUtils.log("Showing controls after PiP disable");
+    setControlsVisibility(true);
     _postEvent(BetterPlayerEvent(BetterPlayerEventType.pipStop));
     return videoPlayerController!.disablePictureInPicture();
   }
