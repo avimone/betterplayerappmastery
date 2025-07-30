@@ -642,8 +642,12 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     @try {
         [self disablePictureInPicture];
         
-        // Handle fullscreen mode properly - don't exit fullscreen
-        // PiP can work from both normal and fullscreen modes
+        // NEW: Get reference to the original BetterPlayerView
+        BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
+        
+        // NEW: Hide the original player layer to prevent dual playback
+        originalPlayerView.playerLayer.hidden = YES;
+        
         if (@available(iOS 9.0, *)) {
             [self usePlayerLayer:frame];
         }
@@ -658,28 +662,27 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 - (void)usePlayerLayer: (CGRect) frame {
     if (_player) {
         @try {
-            // Create new controller passing reference to the AVPlayerLayer
+            // Keep your exact existing code
             self._playerLayer = [AVPlayerLayer playerLayerWithPlayer:_player];
             UIViewController* vc = [[[UIApplication sharedApplication] keyWindow] rootViewController];
             
-            // Handle different orientations and screen sizes (including iPad)
             CGRect adjustedFrame = [self adjustFrameForCurrentOrientation:frame];
             self._playerLayer.frame = adjustedFrame;
             self._playerLayer.needsDisplayOnBoundsChange = YES;
-            
-            // Ensure proper video scaling for PiP
             self._playerLayer.videoGravity = AVLayerVideoGravityResizeAspect;
             
             [vc.view.layer addSublayer:self._playerLayer];
             vc.view.layer.needsDisplayOnBoundsChange = YES;
             
-            // Reset PiP controller
+            // 🚀 ONLY CHANGE: Make the background layer transparent
+            self._playerLayer.opacity = 0.0; // Make it invisible
+            
+            // Keep everything else exactly the same
             if (@available(iOS 9.0, *)) {
                 _pipController = NULL;
             }
             [self setupPipController];
             
-            // Delay to ensure proper setup, especially important for fullscreen transitions
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
                            dispatch_get_main_queue(), ^{
                 [self setPictureInPicture:true];
@@ -707,8 +710,8 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)disablePictureInPicture
 {
-    [self setPictureInPicture:true];
-    if (__playerLayer){
+    [self setPictureInPicture:false]; // Changed from true to NO
+    if (self._playerLayer){ // Changed from __playerLayer to self._playerLayer
         [self._playerLayer removeFromSuperlayer];
         self._playerLayer = nil;
         if (_eventSink != nil) {
@@ -716,15 +719,24 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
         }
     }
 }
+
 #endif
 
 #if TARGET_OS_IOS
 - (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(ios(9.0)) {
+    // Show original player view when PiP stops
+    BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
+    originalPlayerView.playerLayer.hidden = NO;
+    
     [self disablePictureInPicture];
 }
 
 // Enhanced delegate methods with better error handling
 - (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(ios(9.0)) {
+    // Hide original player view when PiP actually starts
+    BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
+    originalPlayerView.playerLayer.hidden = YES;
+    
     if (_eventSink != nil) {
         _eventSink(@{@"event" : @"pipStart"});
     }
@@ -748,8 +760,14 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController 
 restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:(void (^)(BOOL))completionHandler API_AVAILABLE(ios(9.0)) {
-    [self setRestoreUserInterfaceForPIPStopCompletionHandler: YES];
-    completionHandler(YES);
+    // NEW: Ensure proper restoration
+    BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
+    originalPlayerView.playerLayer.hidden = NO;
+    
+    [self setRestoreUserInterfaceForPIPStopCompletionHandler:YES];
+    if (completionHandler) {
+        completionHandler(YES);
+    }
 }
 
 - (void) setAudioTrack:(NSString*) name index:(int) index{
