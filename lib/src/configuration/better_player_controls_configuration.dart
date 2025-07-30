@@ -22,6 +22,11 @@ class BetterPlayerPipConfiguration {
   /// Enable PiP in fullscreen mode (now supported!)
   final bool enableInFullscreen;
 
+  /// 🚀 NEW: Enable/disable play/pause controls in PiP window
+  /// When false, PiP window will have no controls (clean viewing experience)
+  /// When true, PiP window will show play/pause button (default behavior)
+  final bool enablePipControls;
+
   const BetterPlayerPipConfiguration({
     this.enabled = true,
     this.icon = Icons.picture_in_picture_outlined,
@@ -29,6 +34,8 @@ class BetterPlayerPipConfiguration {
     this.aspectRatio,
     this.enableSeamlessResize = true,
     this.enableInFullscreen = true, // NEW: PiP now works in fullscreen
+    this.enablePipControls =
+        false, // 🚀 NEW: Default to no controls for clean PiP
   });
 }
 

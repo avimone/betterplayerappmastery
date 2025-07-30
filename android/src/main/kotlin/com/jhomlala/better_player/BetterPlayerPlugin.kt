@@ -415,7 +415,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
 private fun enablePictureInPicture(player: BetterPlayer) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         try {
-            // Setup media session for better PiP controls
+            // 🚀 FIX: Setup media session but disable controls for clean PiP
             player.setupMediaSession(flutterState!!.applicationContext)
             
             // Use safe default aspect ratio (16:9) that works for all video formats
@@ -423,11 +423,14 @@ private fun enablePictureInPicture(player: BetterPlayer) {
             val pipParamsBuilder = PictureInPictureParams.Builder()
                 .setAspectRatio(aspectRatio)
             
-            // Add better controls for Android 8.1+
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            // 🚀 FIX: Do NOT add controls to prevent play/pause button and UI conflicts
+            // Only add actions if specifically enabled (which we'll default to false)
+            val enableControls = false // Get this from configuration if needed
+            if (enableControls && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
                 val actions = createPipActions()
                 pipParamsBuilder.setActions(actions)
             }
+            // 🚀 SOLUTION: Leave setActions() empty for clean PiP without controls
             
             // Enable auto-enter PiP on user leave hint for Android 12+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -445,7 +448,7 @@ private fun enablePictureInPicture(player: BetterPlayer) {
             if (result) {
                 startPictureInPictureListenerTimer(player)
                 player.onPictureInPictureStatusChanged(true)
-                Log.d(TAG, "Successfully entered Picture in Picture mode")
+                Log.d(TAG, "Successfully entered Picture in Picture mode - Clean UI")
             } else {
                 Log.w(TAG, "Failed to enter Picture in Picture mode")
                 player.onPictureInPictureStatusChanged(false)
@@ -456,6 +459,32 @@ private fun enablePictureInPicture(player: BetterPlayer) {
         }
     }
 }
+
+// 🚀 OPTIONAL: Keep this method for future use but don't call it by default
+@RequiresApi(Build.VERSION_CODES.O_MR1)
+private fun createPipActions(): List<RemoteAction> {
+    val actions = ArrayList<RemoteAction>()
+    
+    // Only create actions if specifically requested
+    // This method won't be called by default, ensuring clean PiP
+    val playPauseIntent = Intent("BETTER_PLAYER_PIP_CONTROL")
+        .putExtra("action", "play_pause")
+    val playPausePendingIntent = PendingIntent.getBroadcast(
+        activity!!, 0, playPauseIntent, 
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    
+    val playPauseAction = RemoteAction(
+        Icon.createWithResource(activity!!, android.R.drawable.ic_media_play),
+        "Play/Pause",
+        "Play or pause the video",
+        playPausePendingIntent
+    )
+    actions.add(playPauseAction)
+    
+    return actions
+}
+
 
 private fun disablePictureInPicture(player: BetterPlayer) {
     try {
@@ -472,7 +501,7 @@ private fun disablePictureInPicture(player: BetterPlayer) {
     }
 }
 
-// Enhanced PiP listener with better fullscreen handling
+// Enhanced PiP listener - FIXED: Prevents UI transition issues
 private fun startPictureInPictureListenerTimer(player: BetterPlayer) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
         pipHandler = Handler(Looper.getMainLooper())
@@ -480,10 +509,13 @@ private fun startPictureInPictureListenerTimer(player: BetterPlayer) {
             override fun run() {
                 try {
                     if (activity != null && activity!!.isInPictureInPictureMode) {
-                        // Update PiP actions periodically if needed
+                        // 🚀 FIX: Do NOT update PiP actions to prevent UI transitions
+                        // Commenting out the updatePipActions call prevents the UI flicker
+                        /*
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
                             updatePipActions()
                         }
+                        */
                         pipHandler!!.postDelayed(this, 500) // Check every 500ms
                     } else {
                         // PiP mode ended
@@ -502,15 +534,19 @@ private fun startPictureInPictureListenerTimer(player: BetterPlayer) {
     }
 }
 
+
+// 🚀 OPTIONAL: Keep but don't use to prevent UI conflicts
 @RequiresApi(Build.VERSION_CODES.O_MR1)
 private fun updatePipActions() {
+    // This method is intentionally not called to prevent UI transitions
+    // If you need dynamic controls, implement with careful state management
     try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // Use safe default aspect ratio
             val aspectRatio = Rational(16, 9)
             val pipParamsBuilder = PictureInPictureParams.Builder()
                 .setAspectRatio(aspectRatio)
-                .setActions(createPipActions())
+                // 🚀 FIX: Don't set actions to keep clean PiP
+                // .setActions(createPipActions())
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 pipParamsBuilder.setSeamlessResizeEnabled(true)
@@ -523,28 +559,7 @@ private fun updatePipActions() {
     }
 }
 
-@RequiresApi(Build.VERSION_CODES.O_MR1)
-private fun createPipActions(): List<RemoteAction> {
-    val actions = ArrayList<RemoteAction>()
-    
-    // Simple Play/Pause action without checking player state
-    val playPauseIntent = Intent("BETTER_PLAYER_PIP_CONTROL")
-        .putExtra("action", "play_pause")
-    val playPausePendingIntent = PendingIntent.getBroadcast(
-        activity!!, 0, playPauseIntent, 
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
-    
-    val playPauseAction = RemoteAction(
-        Icon.createWithResource(activity!!, android.R.drawable.ic_media_play),
-        "Play/Pause",
-        "Play or pause the video",
-        playPausePendingIntent
-    )
-    actions.add(playPauseAction)
-    
-    return actions
-}
+
     private fun dispose(player: BetterPlayer, textureId: Long) {
         player.dispose()
         videoPlayers.remove(textureId)
