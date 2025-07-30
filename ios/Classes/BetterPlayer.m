@@ -733,9 +733,12 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
 // Enhanced delegate methods with better error handling
 - (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(ios(9.0)) {
-    // Hide original player view when PiP actually starts
+    // Hide original player
     BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
     originalPlayerView.playerLayer.hidden = YES;
+    
+    // Move app to background immediately
+    [[UIApplication sharedApplication] performSelector:@selector(suspend)];
     
     if (_eventSink != nil) {
         _eventSink(@{@"event" : @"pipStart"});
