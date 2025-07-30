@@ -662,27 +662,27 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 - (void)usePlayerLayer: (CGRect) frame {
     if (_player) {
         @try {
-            // 🚀 FIX 3: Use the existing player layer from the original view instead of creating a new one
-            BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
-            self._playerLayer = originalPlayerView.playerLayer;
+            // Keep your exact existing code
+            self._playerLayer = [AVPlayerLayer playerLayerWithPlayer:_player];
+            UIViewController* vc = [[[UIApplication sharedApplication] keyWindow] rootViewController];
             
-            // Alternative approach: If you need a new layer, create it but DON'T add to view
-            // self._playerLayer = [AVPlayerLayer playerLayerWithPlayer:_player];
-            // self._playerLayer.frame = [self adjustFrameForCurrentOrientation:frame];
-            // self._playerLayer.needsDisplayOnBoundsChange = YES;
-            // self._playerLayer.videoGravity = AVLayerVideoGravityResizeAspect;
+            CGRect adjustedFrame = [self adjustFrameForCurrentOrientation:frame];
+            self._playerLayer.frame = adjustedFrame;
+            self._playerLayer.needsDisplayOnBoundsChange = YES;
+            self._playerLayer.videoGravity = AVLayerVideoGravityResizeAspect;
             
-            // 🚀 FIX 4: DO NOT add the player layer to any view hierarchy
-            // The PiP controller will handle the layer display
-            // [vc.view.layer addSublayer:self._playerLayer]; // REMOVE THIS LINE
+            [vc.view.layer addSublayer:self._playerLayer];
+            vc.view.layer.needsDisplayOnBoundsChange = YES;
             
-            // Reset PiP controller
+            // 🚀 ONLY CHANGE: Make the background layer transparent
+            self._playerLayer.opacity = 0.0; // Make it invisible
+            
+            // Keep everything else exactly the same
             if (@available(iOS 9.0, *)) {
                 _pipController = NULL;
             }
             [self setupPipController];
             
-            // Delay to ensure proper setup
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
                            dispatch_get_main_queue(), ^{
                 [self setPictureInPicture:true];
@@ -708,18 +708,12 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     return originalFrame;
 }
 
-// 🚀 FIX 5: Enhanced disable method
-- (void)disablePictureInPicture {
-    [self setPictureInPicture:false];
-    if (self._playerLayer) {
-        // Don't remove the layer from superlayer since we're using the original layer
-        // [self._playerLayer removeFromSuperlayer]; // REMOVE THIS
+- (void)disablePictureInPicture
+{
+    [self setPictureInPicture:false]; // Changed from true to NO
+    if (self._playerLayer){ // Changed from __playerLayer to self._playerLayer
+        [self._playerLayer removeFromSuperlayer];
         self._playerLayer = nil;
-        
-        // 🚀 FIX 6: Restore the original player view visibility
-        BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
-        originalPlayerView.playerLayer.hidden = NO;
-        
         if (_eventSink != nil) {
             _eventSink(@{@"event" : @"pipStop"});
         }
@@ -730,16 +724,16 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
 #if TARGET_OS_IOS
 - (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(ios(9.0)) {
-    // 🚀 FIX 8: Restore original player view when PiP stops
+    // Show original player view when PiP stops
     BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
     originalPlayerView.playerLayer.hidden = NO;
     
     [self disablePictureInPicture];
 }
 
-// 🚀 FIX 7: Enhanced delegate methods
+// Enhanced delegate methods with better error handling
 - (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(ios(9.0)) {
-    // Ensure original player view is hidden when PiP actually starts
+    // Hide original player view when PiP actually starts
     BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
     originalPlayerView.playerLayer.hidden = YES;
     
@@ -759,11 +753,6 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 - (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController 
            failedToStartPictureInPictureWithError:(NSError *)error API_AVAILABLE(ios(9.0)) {
     NSLog(@"PiP failed to start: %@", error.localizedDescription);
-    
-    // 🚀 FIX 10: Restore original player view on failure
-    BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
-    originalPlayerView.playerLayer.hidden = NO;
-    
     if (_eventSink != nil) {
         _eventSink(@{@"event" : @"pipError", @"error": error.localizedDescription});
     }
@@ -771,11 +760,11 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController 
 restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:(void (^)(BOOL))completionHandler API_AVAILABLE(ios(9.0)) {
-    // 🚀 FIX 9: Ensure proper restoration
+    // NEW: Ensure proper restoration
     BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
     originalPlayerView.playerLayer.hidden = NO;
     
-    // Call completion handler
+    [self setRestoreUserInterfaceForPIPStopCompletionHandler:YES];
     if (completionHandler) {
         completionHandler(YES);
     }
