@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:better_player/better_player.dart';
 import 'package:better_player/src/configuration/better_player_controller_event.dart';
@@ -9,8 +11,62 @@ import 'package:better_player/src/subtitles/better_player_subtitles_factory.dart
 import 'package:better_player/src/video_player/video_player.dart';
 import 'package:better_player/src/video_player/video_player_platform_interface.dart';
 import 'package:collection/collection.dart' show IterableExtension;
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
+import 'dart:ui' as ui;
+
+// ===== THUMBNAIL SEEKING CONFIGURATION =====
+class ThumbnailSeekingConfiguration {
+  /// Enable/disable thumbnail seeking
+  final bool enabled;
+
+  /// Number of thumbnails to generate for seeking (default: 100)
+  final int thumbnailCount;
+
+  /// Quality of thumbnails (0-100, default: 80)
+  final int thumbnailQuality;
+
+  /// Cache thumbnails for offline use
+  final bool cacheThumbnails;
+
+  /// Thumbnail height in pixels (width auto-calculated to maintain aspect ratio)
+  final int thumbnailHeight;
+
+  /// Show thumbnail preview on hover/drag
+  final bool showPreviewOnHover;
+
+  /// Enable thumbnail generation for HLS segments
+  final bool enableHlsThumbnails;
+
+  const ThumbnailSeekingConfiguration({
+    this.enabled = true,
+    this.thumbnailCount = 100,
+    this.thumbnailQuality = 80,
+    this.cacheThumbnails = true,
+    this.thumbnailHeight = 90,
+    this.showPreviewOnHover = true,
+    this.enableHlsThumbnails = true,
+  });
+}
+
+// ===== THUMBNAIL DATA MODEL =====
+class BetterPlayerVideoThumbnail {
+  final Duration timePosition;
+  final Uint8List imageData;
+  final int width;
+  final int height;
+  final String? cacheKey;
+
+  const BetterPlayerVideoThumbnail({
+    required this.timePosition,
+    required this.imageData,
+    required this.width,
+    required this.height,
+    this.cacheKey,
+  });
+}
 
 ///Class used to control overall Better Player behavior. Main class to change
 ///state of Better Player.
@@ -23,11 +79,20 @@ class BetterPlayerController {
   static const String _dataSourceParameter = "dataSource";
   static const String _authorizationHeader = "Authorization";
 
+  bool get thumbnailsReady => _thumbnailsGenerated;
+
+  /// Stream for thumbnail preview
+  Stream<BetterPlayerVideoThumbnail?> get thumbnailPreviewStream =>
+      _thumbnailPreviewController.stream;
+
   ///General configuration used in controller instance.
   final BetterPlayerConfiguration betterPlayerConfiguration;
 
   ///Playlist configuration used in controller instance.
   final BetterPlayerPlaylistConfiguration? betterPlayerPlaylistConfiguration;
+
+  /// Thumbnail seeking configuration
+  final ThumbnailSeekingConfiguration? thumbnailSeekingConfiguration;
 
   ///List of event listeners, which listen to events.
   final List<Function(BetterPlayerEvent)?> _eventListeners = [];
@@ -215,10 +280,28 @@ class BetterPlayerController {
   bool _wasInFullscreenBeforePip = false;
   bool _isPipActive = false;
   bool get isPipActive => _isPipActive;
+  // ===== THUMBNAIL SEEKING FIELDS =====
+  /// Thumbnail cache for seeking
+  final Map<Duration, BetterPlayerVideoThumbnail> _thumbnailCache = {};
+
+  /// Stream controller for thumbnail preview
+  final StreamController<BetterPlayerVideoThumbnail?>
+      _thumbnailPreviewController =
+      StreamController<BetterPlayerVideoThumbnail?>.broadcast();
+
+  /// Flag to track if thumbnails are generated
+  bool _thumbnailsGenerated = false;
+
+  /// Flag to track if thumbnails are being generated
+  bool _isGeneratingThumbnails = false;
+
+  /// Current video URL for thumbnail cache key
+  String? _currentVideoUrl;
 
   BetterPlayerController(
     this.betterPlayerConfiguration, {
     this.betterPlayerPlaylistConfiguration,
+    this.thumbnailSeekingConfiguration,
     BetterPlayerDataSource? betterPlayerDataSource,
   }) {
     this._betterPlayerControlsConfiguration =
@@ -226,6 +309,264 @@ class BetterPlayerController {
     _eventListeners.add(eventListener);
     if (betterPlayerDataSource != null) {
       setupDataSource(betterPlayerDataSource);
+    }
+  }
+
+  /// Generate thumbnails if needed (call this in your setupDataSource method)
+  Future<void> _generateThumbnailsIfNeeded(
+      BetterPlayerDataSource dataSource) async {
+    if (thumbnailSeekingConfiguration?.enabled != true ||
+        _isGeneratingThumbnails ||
+        _thumbnailsGenerated) return;
+
+    _isGeneratingThumbnails = true;
+
+    try {
+      // Wait for video initialization
+      await _waitForVideoInitialization();
+
+      final videoDuration = videoPlayerController?.value.duration;
+      if (videoDuration == null || videoDuration.inMilliseconds <= 0) {
+        print('Video duration not available for thumbnail generation');
+        return;
+      }
+
+      // Check cache first
+      if (thumbnailSeekingConfiguration?.cacheThumbnails == true) {
+        final cachedThumbnails = await _loadCachedThumbnails(dataSource.url!);
+        if (cachedThumbnails.isNotEmpty) {
+          _thumbnailCache.addAll(cachedThumbnails);
+          _thumbnailsGenerated = true;
+          return;
+        }
+      }
+
+      // Generate new thumbnails
+      await _generateThumbnails(dataSource, videoDuration);
+    } catch (e) {
+      print('Error generating thumbnails: $e');
+    } finally {
+      _isGeneratingThumbnails = false;
+    }
+  }
+
+  /// Wait for video initialization
+  Future<void> _waitForVideoInitialization() async {
+    int attempts = 0;
+    const maxAttempts = 50;
+
+    while (attempts < maxAttempts) {
+      if (videoPlayerController?.value.initialized == true) {
+        return;
+      }
+      await Future.delayed(const Duration(milliseconds: 100));
+      attempts++;
+    }
+
+    throw Exception('Video failed to initialize within timeout period');
+  }
+
+  /// Generate thumbnails
+  Future<void> _generateThumbnails(
+      BetterPlayerDataSource dataSource, Duration videoDuration) async {
+    final config = thumbnailSeekingConfiguration!;
+    final List<Future<BetterPlayerVideoThumbnail?>> thumbnailFutures = [];
+
+    final intervalMs = videoDuration.inMilliseconds / config.thumbnailCount;
+
+    for (int i = 0; i < config.thumbnailCount; i++) {
+      final timeMs = (i * intervalMs).round();
+      final timePosition = Duration(milliseconds: timeMs);
+
+      thumbnailFutures
+          .add(_generateSingleThumbnail(dataSource.url!, timePosition));
+    }
+
+    const batchSize = 10;
+    for (int i = 0; i < thumbnailFutures.length; i += batchSize) {
+      final end = (i + batchSize < thumbnailFutures.length)
+          ? i + batchSize
+          : thumbnailFutures.length;
+      final batch = thumbnailFutures.sublist(i, end);
+
+      final results = await Future.wait(batch);
+
+      for (final thumbnail in results) {
+        if (thumbnail != null) {
+          _thumbnailCache[thumbnail.timePosition] = thumbnail;
+        }
+      }
+
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
+    _thumbnailsGenerated = true;
+
+    if (config.cacheThumbnails && _thumbnailCache.isNotEmpty) {
+      await _saveThumbnailsToCache(dataSource.url!, _thumbnailCache);
+    }
+  }
+
+  /// Generate single thumbnail
+  Future<BetterPlayerVideoThumbnail?> _generateSingleThumbnail(
+      String videoUrl, Duration timePosition) async {
+    final config = thumbnailSeekingConfiguration!;
+
+    try {
+      final thumbnailData = await VideoThumbnail.thumbnailData(
+        video: videoUrl,
+        imageFormat: ImageFormat.PNG,
+        maxHeight: config.thumbnailHeight,
+        timeMs: timePosition.inMilliseconds,
+        quality: config.thumbnailQuality,
+      );
+
+      if (thumbnailData != null) {
+        final codec = await ui.instantiateImageCodec(thumbnailData);
+        final frame = await codec.getNextFrame();
+        final image = frame.image;
+
+        return BetterPlayerVideoThumbnail(
+          timePosition: timePosition,
+          imageData: thumbnailData,
+          width: image.width,
+          height: image.height,
+          cacheKey: _generateCacheKey(videoUrl, timePosition),
+        );
+      }
+    } catch (e) {
+      print(
+          'Error generating thumbnail at ${timePosition.inMilliseconds}ms: $e');
+    }
+
+    return null;
+  }
+
+  /// Get thumbnail at specific position
+  BetterPlayerVideoThumbnail? getThumbnailAtPosition(Duration position) {
+    if (!_thumbnailsGenerated || _thumbnailCache.isEmpty) return null;
+
+    Duration? closestTime;
+    Duration minDiff = const Duration(hours: 1);
+
+    for (final time in _thumbnailCache.keys) {
+      final diff = Duration(
+          milliseconds: (time.inMilliseconds - position.inMilliseconds).abs());
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestTime = time;
+      }
+    }
+
+    return closestTime != null ? _thumbnailCache[closestTime] : null;
+  }
+
+  /// Show thumbnail preview
+  void showThumbnailPreview(Duration position) {
+    if (thumbnailSeekingConfiguration?.showPreviewOnHover != true) return;
+
+    final thumbnail = getThumbnailAtPosition(position);
+    _thumbnailPreviewController.add(thumbnail);
+  }
+
+  /// Hide thumbnail preview
+  void hideThumbnailPreview() {
+    _thumbnailPreviewController.add(null);
+  }
+
+  /// Generate cache key
+  String _generateCacheKey(String videoUrl, Duration position) {
+    final combined = '$videoUrl-${position.inMilliseconds}';
+    return md5.convert(utf8.encode(combined)).toString();
+  }
+
+  /// Get cache directory
+  Future<String> _getCacheDirectory() async {
+    final appDir = await getApplicationDocumentsDirectory();
+    final cacheDir = Directory('${appDir.path}/video_thumbnails');
+    if (!await cacheDir.exists()) {
+      await cacheDir.create(recursive: true);
+    }
+    return cacheDir.path;
+  }
+
+  /// Save thumbnails to cache
+  Future<void> _saveThumbnailsToCache(String videoUrl,
+      Map<Duration, BetterPlayerVideoThumbnail> thumbnails) async {
+    try {
+      final cacheDir = await _getCacheDirectory();
+      final videoHash = md5.convert(utf8.encode(videoUrl)).toString();
+
+      for (final entry in thumbnails.entries) {
+        final thumbnail = entry.value;
+        final fileName = '${videoHash}_${entry.key.inMilliseconds}.png';
+        final file = File('$cacheDir/$fileName');
+        await file.writeAsBytes(thumbnail.imageData);
+      }
+    } catch (e) {
+      print('Error saving thumbnails to cache: $e');
+    }
+  }
+
+  /// Load cached thumbnails
+  Future<Map<Duration, BetterPlayerVideoThumbnail>> _loadCachedThumbnails(
+      String videoUrl) async {
+    final Map<Duration, BetterPlayerVideoThumbnail> cachedThumbnails = {};
+
+    try {
+      final cacheDir = await _getCacheDirectory();
+      final videoHash = md5.convert(utf8.encode(videoUrl)).toString();
+      final directory = Directory(cacheDir);
+
+      await for (final entity in directory.list()) {
+        if (entity is File && entity.path.contains(videoHash)) {
+          final fileName = entity.path.split('/').last;
+          final timeStr = fileName
+              .replaceFirst('${videoHash}_', '')
+              .replaceFirst('.png', '');
+
+          try {
+            final timeMs = int.parse(timeStr);
+            final timePosition = Duration(milliseconds: timeMs);
+            final imageData = await entity.readAsBytes();
+
+            final codec = await ui.instantiateImageCodec(imageData);
+            final frame = await codec.getNextFrame();
+            final image = frame.image;
+
+            cachedThumbnails[timePosition] = BetterPlayerVideoThumbnail(
+              timePosition: timePosition,
+              imageData: imageData,
+              width: image.width,
+              height: image.height,
+              cacheKey: _generateCacheKey(videoUrl, timePosition),
+            );
+          } catch (e) {
+            print('Error loading cached thumbnail: $e');
+          }
+        }
+      }
+    } catch (e) {
+      print('Error loading cached thumbnails: $e');
+    }
+
+    return cachedThumbnails;
+  }
+
+  /// Clear thumbnail cache
+  Future<void> clearThumbnailCache() async {
+    try {
+      final cacheDir = await _getCacheDirectory();
+      final directory = Directory(cacheDir);
+
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+
+      _thumbnailCache.clear();
+      _thumbnailsGenerated = false;
+    } catch (e) {
+      print('Error clearing thumbnail cache: $e');
     }
   }
 
@@ -279,6 +620,11 @@ class BetterPlayerController {
     ///Process data source
     await _setupDataSource(betterPlayerDataSource);
     setTrack(BetterPlayerAsmsTrack.defaultTrack());
+    // ===== THUMBNAIL SEEKING INTEGRATION =====
+    /// Generate thumbnails if enabled
+    if (thumbnailSeekingConfiguration?.enabled == true) {
+      _generateThumbnailsIfNeeded(betterPlayerDataSource);
+    }
   }
 
   ///Configure subtitles based on subtitles source.
@@ -1355,6 +1701,7 @@ class BetterPlayerController {
     this._betterPlayerControlsConfiguration = betterPlayerControlsConfiguration;
   }
 
+  ///////////////////
   /// Add controller internal event.
   void _postControllerEvent(BetterPlayerControllerEvent event) {
     if (!_controllerEventStreamController.isClosed) {
@@ -1383,9 +1730,277 @@ class BetterPlayerController {
       _videoEventStreamSubscription?.cancel();
       _disposed = true;
       _controllerEventStreamController.close();
+      _thumbnailPreviewController.close();
 
       ///Delete files async
       _tempFiles.forEach((file) => file.delete());
     }
+  }
+}
+
+// ===== ENHANCED VIDEO PROGRESS INDICATOR WITH THUMBNAILS =====
+class ThumbnailVideoProgressIndicator extends StatefulWidget {
+  final BetterPlayerController controller;
+  final VideoProgressColors? colors;
+  final EdgeInsets padding;
+  final bool allowScrubbing;
+  final double? height;
+
+  const ThumbnailVideoProgressIndicator(
+    this.controller, {
+    Key? key,
+    this.colors,
+    this.padding = const EdgeInsets.only(top: 5.0),
+    this.allowScrubbing = true,
+    this.height,
+  }) : super(key: key);
+
+  @override
+  State<ThumbnailVideoProgressIndicator> createState() =>
+      _ThumbnailVideoProgressIndicatorState();
+}
+
+class _ThumbnailVideoProgressIndicatorState
+    extends State<ThumbnailVideoProgressIndicator> {
+  BetterPlayerVideoThumbnail? _currentThumbnail;
+  OverlayEntry? _overlayEntry;
+  bool _isDragging = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.videoPlayerController?.addListener(_updateState);
+    widget.controller.thumbnailPreviewStream.listen(_onThumbnailPreview);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.videoPlayerController?.removeListener(_updateState);
+    _removeOverlay();
+    super.dispose();
+  }
+
+  void _updateState() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _onThumbnailPreview(BetterPlayerVideoThumbnail? thumbnail) {
+    _currentThumbnail = thumbnail;
+    if (thumbnail != null && _isDragging) {
+      _showThumbnailOverlay(thumbnail);
+    } else {
+      _removeOverlay();
+    }
+  }
+
+  void _showThumbnailOverlay(BetterPlayerVideoThumbnail thumbnail) {
+    _removeOverlay();
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        bottom: 100,
+        left: 0,
+        right: 0,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 4,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Image.memory(
+                    thumbnail.imageData,
+                    width: thumbnail.width.toDouble(),
+                    height: thumbnail.height.toDouble(),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatDuration(thumbnail.timePosition),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context)?.insert(_overlayEntry!);
+  }
+
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+
+    if (hours > 0) {
+      return '$hours:${twoDigits(minutes)}:${twoDigits(seconds)}';
+    } else {
+      return '${twoDigits(minutes)}:${twoDigits(seconds)}';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: widget.height ?? 20,
+      child: GestureDetector(
+        onPanStart: (details) {
+          if (!widget.allowScrubbing) return;
+          _isDragging = true;
+          _handleSeekGesture(details.localPosition);
+        },
+        onPanUpdate: (details) {
+          if (!widget.allowScrubbing || !_isDragging) return;
+          _handleSeekGesture(details.localPosition);
+        },
+        onPanEnd: (details) {
+          _isDragging = false;
+          widget.controller.hideThumbnailPreview();
+        },
+        onTapDown: (details) {
+          if (!widget.allowScrubbing) return;
+          _handleSeekGesture(details.localPosition);
+        },
+        child: _buildProgressBar(),
+      ),
+    );
+  }
+
+  void _handleSeekGesture(Offset localPosition) {
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final double relative = localPosition.dx / renderBox.size.width;
+    final double clampedRelative = relative.clamp(0.0, 1.0);
+
+    final duration = widget.controller.videoPlayerController?.value.duration;
+    if (duration != null) {
+      final position = duration * clampedRelative;
+
+      if (_isDragging) {
+        // Show thumbnail preview while dragging
+        widget.controller.showThumbnailPreview(position);
+      }
+
+      // Seek to position
+      widget.controller.seekTo(position);
+    }
+  }
+
+  Widget _buildProgressBar() {
+    final controller = widget.controller.videoPlayerController;
+    final colors = widget.colors ?? VideoProgressColors();
+
+    if (controller?.value.initialized != true) {
+      return Container(
+        decoration: BoxDecoration(
+          color: colors.backgroundColor,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      );
+    }
+
+    final duration = controller!.value.duration!.inMilliseconds.toDouble();
+    final position = controller.value.position.inMilliseconds.toDouble();
+
+    double bufferedPosition = 0.0;
+    for (final range in controller.value.buffered) {
+      final end = range.end.inMilliseconds.toDouble();
+      if (end > bufferedPosition) {
+        bufferedPosition = end;
+      }
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: Stack(
+        children: [
+          // Background
+          Container(
+            width: double.infinity,
+            height: widget.height ?? 20,
+            decoration: BoxDecoration(
+              color: colors.backgroundColor,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Buffered progress
+          FractionallySizedBox(
+            widthFactor: bufferedPosition / duration,
+            child: Container(
+              height: widget.height ?? 20,
+              decoration: BoxDecoration(
+                color: colors.bufferedColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          // Played progress
+          FractionallySizedBox(
+            widthFactor: position / duration,
+            child: Container(
+              height: widget.height ?? 20,
+              decoration: BoxDecoration(
+                color: colors.playedColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          // Thumbnail markers (if thumbnails are ready)
+          if (widget.controller.thumbnailsReady)
+            _buildThumbnailMarkers(duration),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThumbnailMarkers(double duration) {
+    return Positioned.fill(
+      child: Row(
+        children: List.generate(
+          10, // Show 10 markers
+          (index) {
+            final progress = (index + 1) / 11; // Avoid 0 and 1
+            return Expanded(
+              child: Container(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  width: 1,
+                  height: (widget.height ?? 20) * 0.5,
+                  color: Colors.white.withOpacity(0.3),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }
