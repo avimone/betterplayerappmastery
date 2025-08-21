@@ -25,5 +25,10 @@ enum BetterPlayerEventType {
   bufferingUpdate,
   bufferingEnd,
   changedPlaylistItem,
-  exit
+  exit,
+  // Add new YouTube-specific events
+  youtubeExtractionStarted,
+  youtubeExtractionCompleted,
+  youtubeExtractionFailed,
+  youtubeQualityChanged,
 }
