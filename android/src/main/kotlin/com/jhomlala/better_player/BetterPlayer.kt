@@ -89,6 +89,7 @@ internal class BetterPlayer(
     private var exoPlayerEventListener: Player.Listener? = null
     private var bitmap: Bitmap? = null
     private var mediaSession: MediaSessionCompat? = null
+    private var mediaSessionConnector: MediaSessionConnector? = null 
     private var drmSessionManager: DrmSessionManager? = null
     private val workManager: WorkManager
     private val workerObserverMap: HashMap<UUID, Observer<WorkInfo?>>
@@ -672,29 +673,34 @@ internal class BetterPlayer(
      */
     @SuppressLint("InlinedApi")
     fun setupMediaSession(context: Context?): MediaSessionCompat? {
-        mediaSession?.release()
-        context?.let {
-
-            val mediaButtonIntent = Intent(Intent.ACTION_MEDIA_BUTTON)
-            val pendingIntent = PendingIntent.getBroadcast(
-                context,
-                0, mediaButtonIntent,
-                PendingIntent.FLAG_IMMUTABLE
-            )
-            val mediaSession = MediaSessionCompat(context, TAG, null, pendingIntent)
-            mediaSession.setCallback(object : MediaSessionCompat.Callback() {
-                override fun onSeekTo(pos: Long) {
-                    sendSeekToEvent(pos)
-                    super.onSeekTo(pos)
-                }
-            })
-            mediaSession.isActive = true
-            val mediaSessionConnector = MediaSessionConnector(mediaSession)
-            mediaSessionConnector.setPlayer(exoPlayer)
-            this.mediaSession = mediaSession
-            return mediaSession
-        }
-        return null
+    // Clean up existing session first
+    disposeMediaSession()
+    
+    context?.let {
+        val mediaButtonIntent = Intent(Intent.ACTION_MEDIA_BUTTON)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            0, mediaButtonIntent,
+            PendingIntent.FLAG_IMMUTABLE
+        )
+        val mediaSession = MediaSessionCompat(context, TAG, null, pendingIntent)
+        mediaSession.setCallback(object : MediaSessionCompat.Callback() {
+            override fun onSeekTo(pos: Long) {
+                sendSeekToEvent(pos)
+                super.onSeekTo(pos)
+            }
+        })
+        mediaSession.isActive = true
+        
+        // Store the MediaSessionConnector as a class variable
+        val connector = MediaSessionConnector(mediaSession)
+        connector.setPlayer(exoPlayer)
+        
+        this.mediaSession = mediaSession
+        this.mediaSessionConnector = connector // Store the connector
+        return mediaSession
+    }
+    return null
 
     }
 
@@ -704,12 +710,28 @@ internal class BetterPlayer(
         eventSink.success(event)
     }
 
-    fun disposeMediaSession() {
-        if (mediaSession != null) {
-            mediaSession?.release()
+fun disposeMediaSession() {
+    try {
+        // First disconnect the MediaSessionConnector
+        mediaSessionConnector?.let { connector ->
+            connector.setPlayer(null) // Disconnect from ExoPlayer
+            Log.d(TAG, "MediaSessionConnector disconnected from player")
+        }
+        mediaSessionConnector = null
+        
+        // Then release the MediaSession
+        mediaSession?.let { session ->
+            if (session.isActive) {
+                session.isActive = false
+            }
+            session.release()
+            Log.d(TAG, "MediaSession released")
         }
         mediaSession = null
+    } catch (e: Exception) {
+        Log.e(TAG, "Error disposing MediaSession: ${e.message}")
     }
+}
 
     fun setAudioTrack(name: String, index: Int) {
         try {
@@ -798,17 +820,30 @@ internal class BetterPlayer(
         setAudioAttributes(exoPlayer, mixWithOthers)
     }
 
-    fun dispose() {
-        disposeMediaSession()
-        disposeRemoteNotifications()
+fun dispose() {
+    try {
+        // Stop the player first
         if (isInitialized) {
             exoPlayer?.stop()
         }
+        
+        // Dispose media session with proper cleanup
+        disposeMediaSession()
+        
+        // Dispose remote notifications
+        disposeRemoteNotifications()
+        
+        // Clean up resources
         textureEntry.release()
         eventChannel.setStreamHandler(null)
         surface?.release()
         exoPlayer?.release()
+        
+        Log.d(TAG, "BetterPlayer disposed successfully")
+    } catch (e: Exception) {
+        Log.e(TAG, "Error during dispose: ${e.message}")
     }
+}
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
