@@ -609,11 +609,35 @@ internal class BetterPlayer(
                     val windowStartTimeMs =
                         timeline.getWindow(0, Timeline.Window()).windowStartTimeMs
                     val pos = exoPlayer?.currentPosition ?: 0L
-                    return windowStartTimeMs + pos
+                
+                    // 🚀 FIX: Validate windowStartTimeMs to prevent DateTime overflow
+                    // Check if windowStartTimeMs is in a valid range for DateTime
+                    // Valid range: -8640000000000000 to 8640000000000000 (excluding buffer)
+                    val maxValidTimestamp = 8640000000000000L - 1000000L // Leave 1M ms buffer
+                    val minValidTimestamp = -8640000000000000L + 1000000L
+                
+                    // If windowStartTimeMs is invalid (like Long.MAX_VALUE for live streams),
+                    // fall back to current position only
+                    if (windowStartTimeMs > maxValidTimestamp || 
+                        windowStartTimeMs < minValidTimestamp ||
+                        windowStartTimeMs == Long.MAX_VALUE ||
+                        windowStartTimeMs == Long.MIN_VALUE) {
+                        Log.w("BetterPlayer", "Invalid windowStartTimeMs: $windowStartTimeMs, using currentPosition only")
+                        return pos
+                    }
+                
+                    // Check if the final result would be in valid range
+                    val result = windowStartTimeMs + pos
+                    if (result > maxValidTimestamp || result < minValidTimestamp) {
+                        Log.w("BetterPlayer", "Result timestamp out of range: $result, using currentPosition only")
+                        return pos
+                    }
+                
+                    return result
                 }
             }
-            return exoPlayer?.currentPosition ?: 0L
-        }
+        return exoPlayer?.currentPosition ?: 0L
+    }
 
     private fun sendInitialized() {
         if (isInitialized) {

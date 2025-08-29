@@ -6,6 +6,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:better_player/src/configuration/better_player_buffering_configuration.dart';
+import 'package:better_player/src/core/better_player_utils.dart';
 import 'package:better_player/src/video_player/video_player_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -459,28 +460,45 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     if (!_created || _isDisposed) {
       return;
     }
-    _timer?.cancel();
     if (value.isPlaying) {
       await _videoPlayerPlatform.play(_textureId);
+      // Start position updates
+      _timer?.cancel();
       _timer = Timer.periodic(
-        const Duration(milliseconds: 300),
+        const Duration(milliseconds: 500),
         (Timer timer) async {
           if (_isDisposed) {
             return;
           }
-          final Duration? newPosition = await position;
-          final DateTime? newAbsolutePosition = await absolutePosition;
-          // ignore: invariant_booleans
-          if (_isDisposed) {
-            return;
-          }
-          _updatePosition(newPosition, absolutePosition: newAbsolutePosition);
-          if (_seekPosition != null && newPosition != null) {
-            final difference =
-                newPosition.inMilliseconds - _seekPosition!.inMilliseconds;
-            if (difference > 0) {
-              _seekPosition = null;
+          try {
+            // 🚀 FIX: Add try-catch around position and absolutePosition calls
+            final Duration? newPosition = await position;
+            DateTime? newAbsolutePosition;
+
+            try {
+              newAbsolutePosition = await absolutePosition;
+            } catch (e) {
+              // If absolutePosition fails, continue with null
+              BetterPlayerUtils.log("Error getting absolute position: $e");
+              newAbsolutePosition = null;
             }
+
+            if (_isDisposed) {
+              return;
+            }
+
+            _updatePosition(newPosition, absolutePosition: newAbsolutePosition);
+
+            if (_seekPosition != null && newPosition != null) {
+              final difference =
+                  newPosition.inMilliseconds - _seekPosition!.inMilliseconds;
+              if (difference > 0) {
+                _seekPosition = null;
+              }
+            }
+          } catch (e) {
+            BetterPlayerUtils.log("Error in position update: $e");
+            // Continue without crashing
           }
         },
       );
