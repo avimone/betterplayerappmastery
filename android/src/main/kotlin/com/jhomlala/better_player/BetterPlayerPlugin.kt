@@ -434,8 +434,10 @@ private fun enablePictureInPicture(player: BetterPlayer) {
             
             // Enable auto-enter PiP on user leave hint for Android 12+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                pipParamsBuilder.setAutoEnterEnabled(true)
+                val autoEnterEnabled = getParameter(parameters, "autoEnterOnUserLeaveHint", false)
+                 pipParamsBuilder.setAutoEnterEnabled(autoEnterEnabled)
             }
+            
             
             // Support seamless resize for better transition from fullscreen
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
