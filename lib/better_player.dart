@@ -37,3 +37,7 @@ export 'src/subtitles/better_player_subtitles_configuration.dart';
 export 'src/subtitles/better_player_subtitles_source.dart';
 export 'src/subtitles/better_player_subtitles_source_type.dart';
 export 'src/video_player/video_player.dart' show VideoPlayerValue;
+// Add these exports at the end
+export 'src/youtube/better_player_youtube_extractor.dart';
+export 'src/youtube/better_player_youtube_extensions.dart';
+export 'src/core/better_player_controller_youtube.dart';
