@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 import 'dart:async';
-import 'package:better_player/src/configuration/better_player_buffering_configuration.dart';
-import 'package:better_player/src/core/better_player_utils.dart';
+import 'package:gadgetspidy_player/src/configuration/gadgetspidy_player_buffering_configuration.dart';
+import 'package:gadgetspidy_player/src/core/gadgetspidy_player_utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'video_player_platform_interface.dart';
 
-const MethodChannel _channel = MethodChannel('better_player_channel');
+const MethodChannel _channel = MethodChannel('gadgetspidy_player_channel');
 
 /// An implementation of [VideoPlayerPlatform] that uses method channels.
 class MethodChannelVideoPlayer extends VideoPlayerPlatform {
@@ -28,7 +28,7 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
 
   @override
   Future<int?> create({
-    BetterPlayerBufferingConfiguration? bufferingConfiguration,
+    GadgetspidyPlayerBufferingConfiguration? bufferingConfiguration,
   }) async {
     late final Map<String, dynamic>? response;
     if (bufferingConfiguration == null) {
@@ -343,7 +343,7 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
               height = heightNum.toDouble();
             }
           } catch (exception) {
-            BetterPlayerUtils.log(exception.toString());
+            GadgetspidyPlayerUtils.log(exception.toString());
           }
 
           final Size size = Size(width, height);
@@ -422,7 +422,7 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
   Widget buildView(int? textureId) {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       return UiKitView(
-        viewType: 'com.jhomlala/better_player',
+        viewType: 'com.jhomlala/gadgetspidy_player',
         creationParamsCodec: const StandardMessageCodec(),
         creationParams: {'textureId': textureId!},
       );
@@ -432,7 +432,7 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
   }
 
   EventChannel _eventChannelFor(int? textureId) {
-    return EventChannel('better_player_channel/videoEvents$textureId');
+    return EventChannel('gadgetspidy_player_channel/videoEvents$textureId');
   }
 
   DurationRange _toDurationRange(dynamic value) {

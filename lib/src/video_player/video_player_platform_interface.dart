@@ -6,7 +6,7 @@
 import 'dart:async';
 
 // Flutter imports:
-import 'package:better_player/src/configuration/better_player_buffering_configuration.dart';
+import 'package:gadgetspidy_player/src/configuration/gadgetspidy_player_buffering_configuration.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'method_channel_video_player.dart';
@@ -67,7 +67,7 @@ abstract class VideoPlayerPlatform {
 
   /// Creates an instance of a video player and returns its textureId.
   Future<int?> create(
-      {BetterPlayerBufferingConfiguration? bufferingConfiguration}) {
+      {GadgetspidyPlayerBufferingConfiguration? bufferingConfiguration}) {
     throw UnimplementedError('create() has not been implemented.');
   }
 

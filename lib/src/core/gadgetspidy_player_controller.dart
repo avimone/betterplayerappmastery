@@ -1,0 +1,1441 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:gadgetspidy_player/gadgetspidy_player.dart';
+import 'package:gadgetspidy_player/src/configuration/gadgetspidy_player_controller_event.dart';
+import 'package:gadgetspidy_player/src/core/gadgetspidy_player_utils.dart';
+import 'package:gadgetspidy_player/src/subtitles/gadgetspidy_player_subtitle.dart';
+import 'package:gadgetspidy_player/src/subtitles/gadgetspidy_player_subtitles_factory.dart';
+import 'package:gadgetspidy_player/src/video_player/video_player.dart';
+import 'package:gadgetspidy_player/src/video_player/video_player_platform_interface.dart';
+import 'package:collection/collection.dart' show IterableExtension;
+import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+
+///Class used to control overall Gadgetspidy Player behavior. Main class to change
+///state of Gadgetspidy Player.
+class GadgetspidyPlayerController {
+  static const String _durationParameter = "duration";
+  static const String _progressParameter = "progress";
+  static const String _bufferedParameter = "buffered";
+  static const String _volumeParameter = "volume";
+  static const String _speedParameter = "speed";
+  static const String _dataSourceParameter = "dataSource";
+  static const String _authorizationHeader = "Authorization";
+
+  ///General configuration used in controller instance.
+  final GadgetspidyPlayerConfiguration gadgetspidyPlayerConfiguration;
+
+  ///Playlist configuration used in controller instance.
+  final GadgetspidyPlayerPlaylistConfiguration?
+      gadgetspidyPlayerPlaylistConfiguration;
+
+  ///List of event listeners, which listen to events.
+  final List<Function(GadgetspidyPlayerEvent)?> _eventListeners = [];
+
+  ///List of files to delete once player disposes.
+  final List<File> _tempFiles = [];
+
+  ///Stream controller which emits stream when control visibility changes.
+  final StreamController<bool> _controlsVisibilityStreamController =
+      StreamController.broadcast();
+
+  ///Instance of video player controller which is adapter used to communicate
+  ///between flutter high level code and lower level native code.
+  VideoPlayerController? videoPlayerController;
+
+  ///Controls configuration
+  late GadgetspidyPlayerControlsConfiguration
+      _gadgetspidyPlayerControlsConfiguration;
+
+  ///Controls configuration
+  GadgetspidyPlayerControlsConfiguration
+      get gadgetspidyPlayerControlsConfiguration =>
+          _gadgetspidyPlayerControlsConfiguration;
+
+  ///Expose all active eventListeners
+  List<Function(GadgetspidyPlayerEvent)?> get eventListeners =>
+      _eventListeners.sublist(1);
+
+  /// Defines a event listener where video player events will be send.
+  Function(GadgetspidyPlayerEvent)? get eventListener =>
+      gadgetspidyPlayerConfiguration.eventListener;
+
+  ///Flag used to store full screen mode state.
+  bool _isFullScreen = false;
+
+  ///Flag used to store full screen mode state.
+  bool get isFullScreen => _isFullScreen;
+
+  ///Time when last progress event was sent
+  int _lastPositionSelection = 0;
+
+  ///Currently used data source in player.
+  GadgetspidyPlayerDataSource? _gadgetspidyPlayerDataSource;
+
+  ///Currently used data source in player.
+  GadgetspidyPlayerDataSource? get gadgetspidyPlayerDataSource =>
+      _gadgetspidyPlayerDataSource;
+
+  ///List of GadgetspidyPlayerSubtitlesSources.
+  final List<GadgetspidyPlayerSubtitlesSource>
+      _gadgetspidyPlayerSubtitlesSourceList = [];
+
+  ///List of GadgetspidyPlayerSubtitlesSources.
+  List<GadgetspidyPlayerSubtitlesSource>
+      get gadgetspidyPlayerSubtitlesSourceList =>
+          _gadgetspidyPlayerSubtitlesSourceList;
+  GadgetspidyPlayerSubtitlesSource? _gadgetspidyPlayerSubtitlesSource;
+
+  ///Currently used subtitles source.
+  GadgetspidyPlayerSubtitlesSource? get gadgetspidyPlayerSubtitlesSource =>
+      _gadgetspidyPlayerSubtitlesSource;
+
+  ///Subtitles lines for current data source.
+  List<GadgetspidyPlayerSubtitle> subtitlesLines = [];
+
+  ///List of tracks available for current data source. Used only for HLS / DASH.
+  List<GadgetspidyPlayerAsmsTrack> _gadgetspidyPlayerAsmsTracks = [];
+
+  ///List of tracks available for current data source. Used only for HLS / DASH.
+  List<GadgetspidyPlayerAsmsTrack> get gadgetspidyPlayerAsmsTracks =>
+      _gadgetspidyPlayerAsmsTracks;
+
+  ///Currently selected player track. Used only for HLS / DASH.
+  GadgetspidyPlayerAsmsTrack? _gadgetspidyPlayerAsmsTrack;
+
+  ///Currently selected player track. Used only for HLS / DASH.
+  GadgetspidyPlayerAsmsTrack? get gadgetspidyPlayerAsmsTrack =>
+      _gadgetspidyPlayerAsmsTrack;
+
+  ///Timer for next video. Used in playlist.
+  Timer? _nextVideoTimer;
+
+  ///Time for next video.
+  int? _nextVideoTime;
+
+  ///Stream controller which emits next video time.
+  final StreamController<int?> _nextVideoTimeStreamController =
+      StreamController.broadcast();
+
+  Stream<int?> get nextVideoTimeStream => _nextVideoTimeStreamController.stream;
+
+  ///Has player been disposed.
+  bool _disposed = false;
+
+  ///Was player playing before automatic pause.
+  bool? _wasPlayingBeforePause;
+
+  ///Currently used translations
+  GadgetspidyPlayerTranslations translations = GadgetspidyPlayerTranslations();
+
+  ///Has current data source started
+  bool _hasCurrentDataSourceStarted = false;
+
+  ///Has current data source initialized
+  bool _hasCurrentDataSourceInitialized = false;
+
+  ///Stream which sends flag whenever visibility of controls changes
+  Stream<bool> get controlsVisibilityStream =>
+      _controlsVisibilityStreamController.stream;
+
+  ///Current app lifecycle state.
+  AppLifecycleState _appLifecycleState = AppLifecycleState.resumed;
+
+  ///Flag which determines if controls (UI interface) is shown. When false,
+  ///UI won't be shown (show only player surface).
+  bool _controlsEnabled = true;
+
+  ///Flag which determines if controls (UI interface) is shown. When false,
+  ///UI won't be shown (show only player surface).
+  bool get controlsEnabled => _controlsEnabled;
+
+  ///Overridden aspect ratio which will be used instead of aspect ratio passed
+  ///in configuration.
+  double? _overriddenAspectRatio;
+
+  ///Overridden fit which will be used instead of fit passed in configuration.
+  BoxFit? _overriddenFit;
+
+  ///Was Picture in Picture opened.
+  bool _wasInPipMode = false;
+
+  ///Was player in fullscreen before Picture in Picture opened.
+  bool _wasInFullScreenBeforePiP = false;
+
+  ///Was controls enabled before Picture in Picture opened.
+  bool _wasControlsEnabledBeforePiP = false;
+
+  ///GlobalKey of the GadgetspidyPlayer widget
+  GlobalKey? _gadgetspidyPlayerGlobalKey;
+
+  ///Getter of the GlobalKey
+  GlobalKey? get gadgetspidyPlayerGlobalKey => _gadgetspidyPlayerGlobalKey;
+
+  ///StreamSubscription for VideoEvent listener
+  StreamSubscription<VideoEvent>? _videoEventStreamSubscription;
+
+  ///Are controls always visible
+  bool _controlsAlwaysVisible = false;
+
+  ///Are controls always visible
+  bool get controlsAlwaysVisible => _controlsAlwaysVisible;
+
+  ///List of all possible audio tracks returned from ASMS stream
+  List<GadgetspidyPlayerAsmsAudioTrack>? _gadgetspidyPlayerAsmsAudioTracks;
+
+  ///List of all possible audio tracks returned from ASMS stream
+  List<GadgetspidyPlayerAsmsAudioTrack>? get gadgetspidyPlayerAsmsAudioTracks =>
+      _gadgetspidyPlayerAsmsAudioTracks;
+
+  ///Selected ASMS audio track
+  GadgetspidyPlayerAsmsAudioTrack? _gadgetspidyPlayerAsmsAudioTrack;
+
+  ///Selected ASMS audio track
+  GadgetspidyPlayerAsmsAudioTrack? get gadgetspidyPlayerAsmsAudioTrack =>
+      _gadgetspidyPlayerAsmsAudioTrack;
+
+  ///Selected videoPlayerValue when error occurred.
+  VideoPlayerValue? _videoPlayerValueOnError;
+
+  ///Flag which holds information about player visibility
+  bool _isPlayerVisible = true;
+
+  final StreamController<GadgetspidyPlayerControllerEvent>
+      _controllerEventStreamController = StreamController.broadcast();
+
+  ///Stream of internal controller events. Shouldn't be used inside app. For
+  ///normal events, use eventListener.
+  Stream<GadgetspidyPlayerControllerEvent> get controllerEventStream =>
+      _controllerEventStreamController.stream;
+
+  ///Flag which determines whether are ASMS segments loading
+  bool _asmsSegmentsLoading = false;
+
+  ///List of loaded ASMS segments
+  final List<String> _asmsSegmentsLoaded = [];
+
+  ///Currently displayed [GadgetspidyPlayerSubtitle].
+  GadgetspidyPlayerSubtitle? renderedSubtitle;
+
+// Add this field to track fullscreen state before PiP
+  bool _wasInFullscreenBeforePip = false;
+  bool _isPipActive = false;
+  bool get isPipActive => _isPipActive;
+
+  GadgetspidyPlayerController(
+    this.gadgetspidyPlayerConfiguration, {
+    this.gadgetspidyPlayerPlaylistConfiguration,
+    GadgetspidyPlayerDataSource? gadgetspidyPlayerDataSource,
+  }) {
+    this._gadgetspidyPlayerControlsConfiguration =
+        gadgetspidyPlayerConfiguration.controlsConfiguration;
+    _eventListeners.add(eventListener);
+    if (gadgetspidyPlayerDataSource != null) {
+      setupDataSource(gadgetspidyPlayerDataSource);
+    }
+  }
+
+  ///Get GadgetspidyPlayerController from context. Used in InheritedWidget.
+  static GadgetspidyPlayerController of(BuildContext context) {
+    final gadgetspidyPlayerControllerProvider =
+        context.dependOnInheritedWidgetOfExactType<
+            GadgetspidyPlayerControllerProvider>()!;
+
+    return gadgetspidyPlayerControllerProvider.controller;
+  }
+
+  ///Setup new data source in Gadgetspidy Player.
+  Future setupDataSource(
+      GadgetspidyPlayerDataSource gadgetspidyPlayerDataSource) async {
+    postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.setupDataSource,
+        parameters: <String, dynamic>{
+          _dataSourceParameter: gadgetspidyPlayerDataSource,
+        }));
+    _postControllerEvent(GadgetspidyPlayerControllerEvent.setupDataSource);
+    _hasCurrentDataSourceStarted = false;
+    _hasCurrentDataSourceInitialized = false;
+    _gadgetspidyPlayerDataSource = gadgetspidyPlayerDataSource;
+    _gadgetspidyPlayerSubtitlesSourceList.clear();
+
+    ///Build videoPlayerController if null
+    if (videoPlayerController == null) {
+      videoPlayerController = VideoPlayerController(
+          bufferingConfiguration:
+              gadgetspidyPlayerDataSource.bufferingConfiguration);
+      videoPlayerController?.addListener(_onVideoPlayerChanged);
+    }
+
+    ///Clear asms tracks
+    gadgetspidyPlayerAsmsTracks.clear();
+
+    ///Setup subtitles
+    final List<GadgetspidyPlayerSubtitlesSource>?
+        gadgetspidyPlayerSubtitlesSourceList =
+        gadgetspidyPlayerDataSource.subtitles;
+    if (gadgetspidyPlayerSubtitlesSourceList != null) {
+      _gadgetspidyPlayerSubtitlesSourceList
+          .addAll(gadgetspidyPlayerDataSource.subtitles!);
+    }
+
+    if (_isDataSourceAsms(gadgetspidyPlayerDataSource)) {
+      _setupAsmsDataSource(gadgetspidyPlayerDataSource).then((dynamic value) {
+        _setupSubtitles();
+      });
+    } else {
+      _setupSubtitles();
+    }
+
+    ///Process data source
+    await _setupDataSource(gadgetspidyPlayerDataSource);
+    setTrack(GadgetspidyPlayerAsmsTrack.defaultTrack());
+  }
+
+  ///Configure subtitles based on subtitles source.
+  void _setupSubtitles() {
+    _gadgetspidyPlayerSubtitlesSourceList.add(
+      GadgetspidyPlayerSubtitlesSource(
+          type: GadgetspidyPlayerSubtitlesSourceType.none),
+    );
+    final defaultSubtitle = _gadgetspidyPlayerSubtitlesSourceList
+        .firstWhereOrNull((element) => element.selectedByDefault == true);
+
+    ///Setup subtitles (none is default)
+    setupSubtitleSource(
+        defaultSubtitle ?? _gadgetspidyPlayerSubtitlesSourceList.last,
+        sourceInitialize: true);
+  }
+
+  ///Check if given [gadgetspidyPlayerDataSource] is HLS / DASH-type data source.
+  bool _isDataSourceAsms(
+          GadgetspidyPlayerDataSource gadgetspidyPlayerDataSource) =>
+      (GadgetspidyPlayerAsmsUtils.isDataSourceHls(
+              gadgetspidyPlayerDataSource.url) ||
+          gadgetspidyPlayerDataSource.videoFormat ==
+              GadgetspidyPlayerVideoFormat.hls) ||
+      (GadgetspidyPlayerAsmsUtils.isDataSourceDash(
+              gadgetspidyPlayerDataSource.url) ||
+          gadgetspidyPlayerDataSource.videoFormat ==
+              GadgetspidyPlayerVideoFormat.dash);
+
+  ///Configure HLS / DASH data source based on provided data source and configuration.
+  ///This method configures tracks, subtitles and audio tracks from given
+  ///master playlist.
+  Future _setupAsmsDataSource(GadgetspidyPlayerDataSource source) async {
+    final String? data = await GadgetspidyPlayerAsmsUtils.getDataFromUrl(
+      gadgetspidyPlayerDataSource!.url,
+      _getHeaders(),
+    );
+    if (data != null) {
+      final GadgetspidyPlayerAsmsDataHolder _response =
+          await GadgetspidyPlayerAsmsUtils.parse(
+              data, gadgetspidyPlayerDataSource!.url);
+
+      /// Load tracks
+      if (_gadgetspidyPlayerDataSource?.useAsmsTracks == true) {
+        _gadgetspidyPlayerAsmsTracks = _response.tracks ?? [];
+      }
+
+      /// Load subtitles
+      if (gadgetspidyPlayerDataSource?.useAsmsSubtitles == true) {
+        final List<GadgetspidyPlayerAsmsSubtitle> asmsSubtitles =
+            _response.subtitles ?? [];
+        asmsSubtitles.forEach((GadgetspidyPlayerAsmsSubtitle asmsSubtitle) {
+          _gadgetspidyPlayerSubtitlesSourceList.add(
+            GadgetspidyPlayerSubtitlesSource(
+              type: GadgetspidyPlayerSubtitlesSourceType.network,
+              name: asmsSubtitle.name,
+              urls: asmsSubtitle.realUrls,
+              asmsIsSegmented: asmsSubtitle.isSegmented,
+              asmsSegmentsTime: asmsSubtitle.segmentsTime,
+              asmsSegments: asmsSubtitle.segments,
+              selectedByDefault: asmsSubtitle.isDefault,
+            ),
+          );
+        });
+      }
+
+      ///Load audio tracks
+      if (gadgetspidyPlayerDataSource?.useAsmsAudioTracks == true &&
+          _isDataSourceAsms(gadgetspidyPlayerDataSource!)) {
+        _gadgetspidyPlayerAsmsAudioTracks = _response.audios ?? [];
+        if (_gadgetspidyPlayerAsmsAudioTracks?.isNotEmpty == true) {
+          setAudioTrack(_gadgetspidyPlayerAsmsAudioTracks!.first);
+        }
+      }
+    }
+  }
+
+  ///Setup subtitles to be displayed from given subtitle source.
+  ///If subtitles source is segmented then don't load videos at start. Videos
+  ///will load with just in time policy.
+  Future<void> setupSubtitleSource(
+      GadgetspidyPlayerSubtitlesSource subtitlesSource,
+      {bool sourceInitialize = false}) async {
+    _gadgetspidyPlayerSubtitlesSource = subtitlesSource;
+    subtitlesLines.clear();
+    _asmsSegmentsLoaded.clear();
+    _asmsSegmentsLoading = false;
+
+    if (subtitlesSource.type != GadgetspidyPlayerSubtitlesSourceType.none) {
+      if (subtitlesSource.asmsIsSegmented == true) {
+        return;
+      }
+      final subtitlesParsed =
+          await GadgetspidyPlayerSubtitlesFactory.parseSubtitles(
+              subtitlesSource);
+      subtitlesLines.addAll(subtitlesParsed);
+    }
+
+    _postEvent(
+        GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.changedSubtitles));
+    if (!_disposed && !sourceInitialize) {
+      _postControllerEvent(GadgetspidyPlayerControllerEvent.changeSubtitles);
+    }
+  }
+
+  ///Load ASMS subtitles segments for given [position].
+  ///Segments are being loaded within range (current video position;endPosition)
+  ///where endPosition is based on time segment detected in HLS playlist. If
+  ///time segment is not present then 5000 ms will be used. Also time segment
+  ///is multiplied by 5 to increase window of duration.
+  ///Segments are also cached, so same segment won't load twice. Only one
+  ///pack of segments can be load at given time.
+  Future _loadAsmsSubtitlesSegments(Duration position) async {
+    try {
+      if (_asmsSegmentsLoading) {
+        return;
+      }
+      _asmsSegmentsLoading = true;
+      final GadgetspidyPlayerSubtitlesSource? source =
+          _gadgetspidyPlayerSubtitlesSource;
+      final Duration loadDurationEnd = Duration(
+          milliseconds: position.inMilliseconds +
+              5 *
+                  (_gadgetspidyPlayerSubtitlesSource?.asmsSegmentsTime ??
+                      5000));
+
+      final segmentsToLoad = _gadgetspidyPlayerSubtitlesSource?.asmsSegments
+          ?.where((segment) {
+            return segment.startTime > position &&
+                segment.endTime < loadDurationEnd &&
+                !_asmsSegmentsLoaded.contains(segment.realUrl);
+          })
+          .map((segment) => segment.realUrl)
+          .toList();
+
+      if (segmentsToLoad != null && segmentsToLoad.isNotEmpty) {
+        final subtitlesParsed =
+            await GadgetspidyPlayerSubtitlesFactory.parseSubtitles(
+                GadgetspidyPlayerSubtitlesSource(
+          type: _gadgetspidyPlayerSubtitlesSource!.type,
+          headers: _gadgetspidyPlayerSubtitlesSource!.headers,
+          urls: segmentsToLoad,
+        ));
+
+        ///Additional check if current source of subtitles is same as source
+        ///used to start loading subtitles. It can be different when user
+        ///changes subtitles and there was already pending load.
+        if (source == _gadgetspidyPlayerSubtitlesSource) {
+          subtitlesLines.addAll(subtitlesParsed);
+          _asmsSegmentsLoaded.addAll(segmentsToLoad);
+        }
+      }
+      _asmsSegmentsLoading = false;
+    } catch (exception) {
+      GadgetspidyPlayerUtils.log(
+          "Load ASMS subtitle segments failed: $exception");
+    }
+  }
+
+  ///Get VideoFormat from GadgetspidyPlayerVideoFormat (adapter method which translates
+  ///to video_player supported format).
+  VideoFormat? _getVideoFormat(
+      GadgetspidyPlayerVideoFormat? gadgetspidyPlayerVideoFormat) {
+    if (gadgetspidyPlayerVideoFormat == null) {
+      return null;
+    }
+    switch (gadgetspidyPlayerVideoFormat) {
+      case GadgetspidyPlayerVideoFormat.dash:
+        return VideoFormat.dash;
+      case GadgetspidyPlayerVideoFormat.hls:
+        return VideoFormat.hls;
+      case GadgetspidyPlayerVideoFormat.ss:
+        return VideoFormat.ss;
+      case GadgetspidyPlayerVideoFormat.other:
+        return VideoFormat.other;
+    }
+  }
+
+  ///Internal method which invokes videoPlayerController source setup.
+  Future _setupDataSource(
+      GadgetspidyPlayerDataSource gadgetspidyPlayerDataSource) async {
+    switch (gadgetspidyPlayerDataSource.type) {
+      case GadgetspidyPlayerDataSourceType.network:
+        await videoPlayerController?.setNetworkDataSource(
+          gadgetspidyPlayerDataSource.url,
+          headers: _getHeaders(),
+          useCache:
+              _gadgetspidyPlayerDataSource!.cacheConfiguration?.useCache ??
+                  false,
+          maxCacheSize:
+              _gadgetspidyPlayerDataSource!.cacheConfiguration?.maxCacheSize ??
+                  0,
+          maxCacheFileSize: _gadgetspidyPlayerDataSource!
+                  .cacheConfiguration?.maxCacheFileSize ??
+              0,
+          cacheKey: _gadgetspidyPlayerDataSource?.cacheConfiguration?.key,
+          showNotification: _gadgetspidyPlayerDataSource
+              ?.notificationConfiguration?.showNotification,
+          title: _gadgetspidyPlayerDataSource?.notificationConfiguration?.title,
+          author:
+              _gadgetspidyPlayerDataSource?.notificationConfiguration?.author,
+          imageUrl:
+              _gadgetspidyPlayerDataSource?.notificationConfiguration?.imageUrl,
+          notificationChannelName: _gadgetspidyPlayerDataSource
+              ?.notificationConfiguration?.notificationChannelName,
+          overriddenDuration: _gadgetspidyPlayerDataSource!.overriddenDuration,
+          formatHint:
+              _getVideoFormat(_gadgetspidyPlayerDataSource!.videoFormat),
+          licenseUrl:
+              _gadgetspidyPlayerDataSource?.drmConfiguration?.licenseUrl,
+          certificateUrl:
+              _gadgetspidyPlayerDataSource?.drmConfiguration?.certificateUrl,
+          drmHeaders: _gadgetspidyPlayerDataSource?.drmConfiguration?.headers,
+          activityName: _gadgetspidyPlayerDataSource
+              ?.notificationConfiguration?.activityName,
+          clearKey: _gadgetspidyPlayerDataSource?.drmConfiguration?.clearKey,
+          videoExtension: _gadgetspidyPlayerDataSource!.videoExtension,
+        );
+
+        break;
+      case GadgetspidyPlayerDataSourceType.file:
+        final file = File(gadgetspidyPlayerDataSource.url);
+        if (!file.existsSync()) {
+          GadgetspidyPlayerUtils.log(
+              "File ${file.path} doesn't exists. This may be because "
+              "you're acessing file from native path and Flutter doesn't "
+              "recognize this path.");
+        }
+
+        await videoPlayerController?.setFileDataSource(
+            File(gadgetspidyPlayerDataSource.url),
+            showNotification: _gadgetspidyPlayerDataSource
+                ?.notificationConfiguration?.showNotification,
+            title:
+                _gadgetspidyPlayerDataSource?.notificationConfiguration?.title,
+            author:
+                _gadgetspidyPlayerDataSource?.notificationConfiguration?.author,
+            imageUrl: _gadgetspidyPlayerDataSource
+                ?.notificationConfiguration?.imageUrl,
+            notificationChannelName: _gadgetspidyPlayerDataSource
+                ?.notificationConfiguration?.notificationChannelName,
+            overriddenDuration:
+                _gadgetspidyPlayerDataSource!.overriddenDuration,
+            activityName: _gadgetspidyPlayerDataSource
+                ?.notificationConfiguration?.activityName,
+            clearKey: _gadgetspidyPlayerDataSource?.drmConfiguration?.clearKey);
+        break;
+      case GadgetspidyPlayerDataSourceType.memory:
+        final file = await _createFile(_gadgetspidyPlayerDataSource!.bytes!,
+            extension: _gadgetspidyPlayerDataSource!.videoExtension);
+
+        if (file.existsSync()) {
+          await videoPlayerController?.setFileDataSource(file,
+              showNotification: _gadgetspidyPlayerDataSource
+                  ?.notificationConfiguration?.showNotification,
+              title: _gadgetspidyPlayerDataSource
+                  ?.notificationConfiguration?.title,
+              author: _gadgetspidyPlayerDataSource
+                  ?.notificationConfiguration?.author,
+              imageUrl: _gadgetspidyPlayerDataSource
+                  ?.notificationConfiguration?.imageUrl,
+              notificationChannelName: _gadgetspidyPlayerDataSource
+                  ?.notificationConfiguration?.notificationChannelName,
+              overriddenDuration:
+                  _gadgetspidyPlayerDataSource!.overriddenDuration,
+              activityName: _gadgetspidyPlayerDataSource
+                  ?.notificationConfiguration?.activityName,
+              clearKey:
+                  _gadgetspidyPlayerDataSource?.drmConfiguration?.clearKey);
+          _tempFiles.add(file);
+        } else {
+          throw ArgumentError("Couldn't create file from memory.");
+        }
+        break;
+
+      default:
+        throw UnimplementedError(
+            "${gadgetspidyPlayerDataSource.type} is not implemented");
+    }
+    await _initializeVideo();
+  }
+
+  ///Create file from provided list of bytes. File will be created in temporary
+  ///directory.
+  Future<File> _createFile(List<int> bytes,
+      {String? extension = "temp"}) async {
+    final String dir = (await getTemporaryDirectory()).path;
+    final File temp = File(
+        '$dir/gadgetspidy_player_${DateTime.now().millisecondsSinceEpoch}.$extension');
+    await temp.writeAsBytes(bytes);
+    return temp;
+  }
+
+  ///Initializes video based on configuration. Invoke actions which need to be
+  ///run on player start.
+  Future _initializeVideo() async {
+    setLooping(gadgetspidyPlayerConfiguration.looping);
+    _videoEventStreamSubscription?.cancel();
+    _videoEventStreamSubscription = null;
+
+    _videoEventStreamSubscription = videoPlayerController
+        ?.videoEventStreamController.stream
+        .listen(_handleVideoEvent);
+
+    final fullScreenByDefault =
+        gadgetspidyPlayerConfiguration.fullScreenByDefault;
+    if (gadgetspidyPlayerConfiguration.autoPlay) {
+      if (fullScreenByDefault && !isFullScreen) {
+        enterFullScreen();
+      }
+      if (_isAutomaticPlayPauseHandled()) {
+        if (_appLifecycleState == AppLifecycleState.resumed &&
+            _isPlayerVisible) {
+          await play();
+        } else {
+          _wasPlayingBeforePause = true;
+        }
+      } else {
+        await play();
+      }
+    } else {
+      if (fullScreenByDefault) {
+        enterFullScreen();
+      }
+    }
+
+    final startAt = gadgetspidyPlayerConfiguration.startAt;
+    if (startAt != null) {
+      seekTo(startAt);
+    }
+  }
+
+  ///Method which is invoked when full screen changes.
+  Future<void> _onFullScreenStateChanged() async {
+    if (videoPlayerController?.value.isPlaying == true && !_isFullScreen) {
+      enterFullScreen();
+      videoPlayerController?.removeListener(_onFullScreenStateChanged);
+    }
+  }
+
+  ///Enables full screen mode in player. This will trigger route change.
+  void enterFullScreen() {
+    _isFullScreen = true;
+    _postControllerEvent(GadgetspidyPlayerControllerEvent.openFullscreen);
+  }
+
+  ///Disables full screen mode in player. This will trigger route change.
+  void exitFullScreen() {
+    _isFullScreen = false;
+    _postControllerEvent(GadgetspidyPlayerControllerEvent.hideFullscreen);
+  }
+
+  ///Enables/disables full screen mode based on current fullscreen state.
+  void toggleFullScreen() {
+    //if (_gadgetspidyPlayerDataSource!.liveStream!) {
+    _isFullScreen = !_isFullScreen;
+    if (_isFullScreen) {
+      _postControllerEvent(GadgetspidyPlayerControllerEvent.openFullscreen);
+    } else {
+      _postControllerEvent(GadgetspidyPlayerControllerEvent.hideFullscreen);
+    }
+    //  } else {}
+  }
+
+  ///Enables/disables full screen mode based on current fullscreen state.
+  void exitPlayer() {
+    if (_isFullScreen) {
+      _postControllerEvent(GadgetspidyPlayerControllerEvent.exit);
+      _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.exit));
+    } else {
+      _postControllerEvent(GadgetspidyPlayerControllerEvent.exit);
+      _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.exit));
+    }
+  }
+
+  ///Start video playback. Play will be triggered only if current lifecycle state
+  ///is resumed.
+  Future<void> play() async {
+    if (videoPlayerController == null) {
+      throw StateError("The data source has not been initialized");
+    }
+
+    if (_appLifecycleState == AppLifecycleState.resumed) {
+      await videoPlayerController!.play();
+      _hasCurrentDataSourceStarted = true;
+      _wasPlayingBeforePause = null;
+      _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.play));
+      _postControllerEvent(GadgetspidyPlayerControllerEvent.play);
+    }
+  }
+
+  ///Enables/disables looping (infinity playback) mode.
+  Future<void> setLooping(bool looping) async {
+    if (videoPlayerController == null) {
+      throw StateError("The data source has not been initialized");
+    }
+
+    await videoPlayerController!.setLooping(looping);
+  }
+
+  ///Stop video playback.
+  Future<void> pause() async {
+    if (videoPlayerController == null) {
+      throw StateError("The data source has not been initialized");
+    }
+
+    await videoPlayerController!.pause();
+    _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.pause));
+  }
+
+  ///Move player to specific position/moment of the video.
+  Future<void> seekTo(Duration moment) async {
+    if (videoPlayerController == null) {
+      throw StateError("The data source has not been initialized");
+    }
+    if (videoPlayerController?.value.duration == null) {
+      throw StateError("The video has not been initialized yet.");
+    }
+
+    await videoPlayerController!.seekTo(moment);
+
+    _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.seekTo,
+        parameters: <String, dynamic>{_durationParameter: moment}));
+
+    final Duration? currentDuration = videoPlayerController!.value.duration;
+    if (currentDuration == null) {
+      return;
+    }
+    if (moment > currentDuration) {
+      _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.finished));
+    } else {
+      cancelNextVideoTimer();
+    }
+  }
+
+  ///Set volume of player. Allows values from 0.0 to 1.0.
+  Future<void> setVolume(double volume) async {
+    if (volume < 0.0 || volume > 1.0) {
+      GadgetspidyPlayerUtils.log("Volume must be between 0.0 and 1.0");
+      throw ArgumentError("Volume must be between 0.0 and 1.0");
+    }
+    if (videoPlayerController == null) {
+      GadgetspidyPlayerUtils.log("The data source has not been initialized");
+      throw StateError("The data source has not been initialized");
+    }
+    await videoPlayerController!.setVolume(volume);
+    _postEvent(GadgetspidyPlayerEvent(
+      GadgetspidyPlayerEventType.setVolume,
+      parameters: <String, dynamic>{_volumeParameter: volume},
+    ));
+  }
+
+  ///Set playback speed of video. Allows to set speed value between 0 and 2.
+  Future<void> setSpeed(double speed) async {
+    if (speed <= 0 || speed > 2) {
+      GadgetspidyPlayerUtils.log("Speed must be between 0 and 2");
+      throw ArgumentError("Speed must be between 0 and 2");
+    }
+    if (videoPlayerController == null) {
+      GadgetspidyPlayerUtils.log("The data source has not been initialized");
+      throw StateError("The data source has not been initialized");
+    }
+    await videoPlayerController?.setSpeed(speed);
+    _postEvent(
+      GadgetspidyPlayerEvent(
+        GadgetspidyPlayerEventType.setSpeed,
+        parameters: <String, dynamic>{
+          _speedParameter: speed,
+        },
+      ),
+    );
+  }
+
+  ///Flag which determines whenever player is playing or not.
+  bool? isPlaying() {
+    if (videoPlayerController == null) {
+      throw StateError("The data source has not been initialized");
+    }
+    return videoPlayerController!.value.isPlaying;
+  }
+
+  ///Flag which determines whenever player is loading video data or not.
+  bool? isBuffering() {
+    if (videoPlayerController == null) {
+      throw StateError("The data source has not been initialized");
+    }
+    return videoPlayerController!.value.isBuffering;
+  }
+
+  ///Show or hide controls manually
+  void setControlsVisibility(bool isVisible) {
+    _controlsVisibilityStreamController.add(isVisible);
+  }
+
+  ///Enable/disable controls (when enabled = false, controls will be always hidden)
+  void setControlsEnabled(bool enabled) {
+    if (!enabled) {
+      _controlsVisibilityStreamController.add(false);
+    }
+    _controlsEnabled = enabled;
+  }
+
+  ///Internal method, used to trigger CONTROLS_VISIBLE or CONTROLS_HIDDEN event
+  ///once controls state changed.
+  void toggleControlsVisibility(bool isVisible) {
+    _postEvent(isVisible
+        ? GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.controlsVisible)
+        : GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.controlsHiddenEnd));
+  }
+
+  ///Send player event. Shouldn't be used manually.
+  void postEvent(GadgetspidyPlayerEvent gadgetspidyPlayerEvent) {
+    _postEvent(gadgetspidyPlayerEvent);
+  }
+
+  ///Send player event to all listeners.
+  void _postEvent(GadgetspidyPlayerEvent gadgetspidyPlayerEvent) {
+    for (final Function(GadgetspidyPlayerEvent)? eventListener
+        in _eventListeners) {
+      if (eventListener != null) {
+        eventListener(gadgetspidyPlayerEvent);
+      }
+    }
+  }
+
+  int _retryCount = 0;
+  final int _maxRetryCount = 5; // Or 5 times
+  ///Listener used to handle video player changes.
+  void _onVideoPlayerChanged() async {
+    final VideoPlayerValue currentVideoPlayerValue =
+        videoPlayerController?.value ??
+            VideoPlayerValue(duration: const Duration());
+
+    if (currentVideoPlayerValue.hasError) {
+      _videoPlayerValueOnError ??= currentVideoPlayerValue;
+      _postEvent(
+        GadgetspidyPlayerEvent(
+          GadgetspidyPlayerEventType.exception,
+          parameters: <String, dynamic>{
+            "exception": currentVideoPlayerValue.errorDescription
+          },
+        ),
+      );
+      // 🚀 Automatically retry after short delay
+      if (_retryCount < _maxRetryCount) {
+        _retryCount++;
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!_disposed) {
+            retryDataSource();
+          }
+        });
+      } else {
+        print("Max retry attempts reached, not retrying further.");
+      }
+    }
+    if (currentVideoPlayerValue.initialized &&
+        !_hasCurrentDataSourceInitialized) {
+      _hasCurrentDataSourceInitialized = true;
+      _postEvent(
+          GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.initialized));
+    }
+    if (currentVideoPlayerValue.isPip) {
+      _wasInPipMode = true;
+    } else if (_wasInPipMode) {
+      _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.pipStop));
+      _wasInPipMode = false;
+      if (!_wasInFullScreenBeforePiP) {
+        exitFullScreen();
+      }
+      if (_wasControlsEnabledBeforePiP) {
+        setControlsEnabled(true);
+      }
+      videoPlayerController?.refresh();
+    }
+
+    if (_gadgetspidyPlayerSubtitlesSource?.asmsIsSegmented == true) {
+      _loadAsmsSubtitlesSegments(currentVideoPlayerValue.position);
+    }
+
+    final int now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastPositionSelection > 500) {
+      _lastPositionSelection = now;
+      _postEvent(
+        GadgetspidyPlayerEvent(
+          GadgetspidyPlayerEventType.progress,
+          parameters: <String, dynamic>{
+            _progressParameter: currentVideoPlayerValue.position,
+            _durationParameter: currentVideoPlayerValue.duration
+          },
+        ),
+      );
+    }
+  }
+
+  ///Add event listener which listens to player events.
+  void addEventsListener(Function(GadgetspidyPlayerEvent) eventListener) {
+    _eventListeners.add(eventListener);
+  }
+
+  ///Remove event listener. This method should be called once you're disposing
+  ///Gadgetspidy Player.
+  void removeEventsListener(Function(GadgetspidyPlayerEvent) eventListener) {
+    _eventListeners.remove(eventListener);
+  }
+
+  ///Flag which determines whenever player is playing live data source.
+  bool isLiveStream() {
+    if (_gadgetspidyPlayerDataSource == null) {
+      GadgetspidyPlayerUtils.log("The data source has not been initialized");
+      throw StateError("The data source has not been initialized");
+    }
+    return _gadgetspidyPlayerDataSource!.liveStream == true;
+  }
+
+  ///Flag which determines whenever player data source has been initialized.
+  bool? isVideoInitialized() {
+    if (videoPlayerController == null) {
+      GadgetspidyPlayerUtils.log("The data source has not been initialized");
+      throw StateError("The data source has not been initialized");
+    }
+    return videoPlayerController?.value.initialized;
+  }
+
+  ///Start timer which will trigger next video. Used in playlist. Do not use
+  ///manually.
+  void startNextVideoTimer() {
+    if (_nextVideoTimer == null) {
+      if (gadgetspidyPlayerPlaylistConfiguration == null) {
+        GadgetspidyPlayerUtils.log(
+            "BettterPlayerPlaylistConifugration has not been set!");
+        throw StateError(
+            "BettterPlayerPlaylistConifugration has not been set!");
+      }
+
+      _nextVideoTime =
+          gadgetspidyPlayerPlaylistConfiguration!.nextVideoDelay.inSeconds;
+      _nextVideoTimeStreamController.add(_nextVideoTime);
+      if (_nextVideoTime == 0) {
+        return;
+      }
+
+      _nextVideoTimer =
+          Timer.periodic(const Duration(milliseconds: 1000), (_timer) async {
+        if (_nextVideoTime == 1) {
+          _timer.cancel();
+          _nextVideoTimer = null;
+        }
+        if (_nextVideoTime != null) {
+          _nextVideoTime = _nextVideoTime! - 1;
+        }
+        _nextVideoTimeStreamController.add(_nextVideoTime);
+      });
+    }
+  }
+
+  ///Cancel next video timer. Used in playlist. Do not use manually.
+  void cancelNextVideoTimer() {
+    _nextVideoTime = null;
+    _nextVideoTimeStreamController.add(_nextVideoTime);
+    _nextVideoTimer?.cancel();
+    _nextVideoTimer = null;
+  }
+
+  ///Play next video form playlist. Do not use manually.
+  void playNextVideo() {
+    _nextVideoTime = 0;
+    _nextVideoTimeStreamController.add(_nextVideoTime);
+    _postEvent(
+        GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.changedPlaylistItem));
+    cancelNextVideoTimer();
+  }
+
+  ///Setup track parameters for currently played video. Can be only used for HLS or DASH
+  ///data source.
+  void setTrack(GadgetspidyPlayerAsmsTrack track) {
+    if (videoPlayerController == null) {
+      print("failed changed Track ");
+
+      throw StateError("The data source has not been initialized");
+    }
+    _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.changedTrack,
+        parameters: <String, dynamic>{
+          "id": track.id,
+          "width": track.width,
+          "height": track.height,
+          "bitrate": track.bitrate,
+          "frameRate": track.frameRate,
+          "codecs": track.codecs,
+          "mimeType": track.mimeType,
+        }));
+
+    videoPlayerController!
+        .setTrackParameters(track.width, track.height, track.bitrate);
+    _gadgetspidyPlayerAsmsTrack = track;
+    print("changed Track ${track.width}, ${track.height}");
+  }
+
+  ///Check if player can be played/paused automatically
+  bool _isAutomaticPlayPauseHandled() {
+    return !(_gadgetspidyPlayerDataSource
+                ?.notificationConfiguration?.showNotification ==
+            true) &&
+        gadgetspidyPlayerConfiguration.handleLifecycle;
+  }
+
+  ///Listener which handles state of player visibility. If player visibility is
+  ///below 0.0 then video will be paused. When value is greater than 0, video
+  ///will play again. If there's different handler of visibility then it will be
+  ///used. If showNotification is set in data source or handleLifecycle is false
+  /// then this logic will be ignored.
+  void onPlayerVisibilityChanged(double visibilityFraction) async {
+    _isPlayerVisible = visibilityFraction > 0;
+    if (_disposed) {
+      return;
+    }
+    _postEvent(GadgetspidyPlayerEvent(
+        GadgetspidyPlayerEventType.changedPlayerVisibility));
+
+    if (_isAutomaticPlayPauseHandled()) {
+      if (gadgetspidyPlayerConfiguration.playerVisibilityChangedBehavior !=
+          null) {
+        gadgetspidyPlayerConfiguration
+            .playerVisibilityChangedBehavior!(visibilityFraction);
+      } else {
+        if (visibilityFraction == 0) {
+          _wasPlayingBeforePause ??= isPlaying();
+          pause();
+        } else {
+          if (_wasPlayingBeforePause == true && !isPlaying()!) {
+            play();
+          }
+        }
+      }
+    }
+  }
+
+  ///Set different resolution (quality) for video
+  void setResolution(String url) async {
+    if (videoPlayerController == null) {
+      throw StateError("The data source has not been initialized");
+    }
+    final position = await videoPlayerController!.position;
+    final wasPlayingBeforeChange = isPlaying()!;
+    pause();
+    await setupDataSource(gadgetspidyPlayerDataSource!.copyWith(url: url));
+    seekTo(position!);
+    if (wasPlayingBeforeChange) {
+      play();
+    }
+    _postEvent(GadgetspidyPlayerEvent(
+      GadgetspidyPlayerEventType.changedResolution,
+      parameters: <String, dynamic>{"url": url},
+    ));
+  }
+
+  ///Setup translations for given locale. In normal use cases it shouldn't be
+  ///called manually.
+  void setupTranslations(Locale locale) {
+    // ignore: unnecessary_null_comparison
+    if (locale != null) {
+      final String languageCode = locale.languageCode;
+      translations = gadgetspidyPlayerConfiguration.translations
+              ?.firstWhereOrNull((translations) =>
+                  translations.languageCode == languageCode) ??
+          _getDefaultTranslations(locale);
+    } else {
+      GadgetspidyPlayerUtils.log(
+          "Locale is null. Couldn't setup translations.");
+    }
+  }
+
+  ///Setup default translations for selected user locale. These translations
+  ///are pre-build in.
+  GadgetspidyPlayerTranslations _getDefaultTranslations(Locale locale) {
+    final String languageCode = locale.languageCode;
+    switch (languageCode) {
+      case "pl":
+        return GadgetspidyPlayerTranslations.polish();
+      case "zh":
+        return GadgetspidyPlayerTranslations.chinese();
+      case "hi":
+        return GadgetspidyPlayerTranslations.hindi();
+      case "tr":
+        return GadgetspidyPlayerTranslations.turkish();
+      case "vi":
+        return GadgetspidyPlayerTranslations.vietnamese();
+      case "es":
+        return GadgetspidyPlayerTranslations.spanish();
+      default:
+        return GadgetspidyPlayerTranslations();
+    }
+  }
+
+  ///Flag which determines whenever current data source has started.
+  bool get hasCurrentDataSourceStarted => _hasCurrentDataSourceStarted;
+
+  ///Set current lifecycle state. If state is [AppLifecycleState.resumed] then
+  ///player starts playing again. if lifecycle is in [AppLifecycleState.paused]
+  ///state, then video playback will stop. If showNotification is set in data
+  ///source or handleLifecycle is false then this logic will be ignored.
+  void setAppLifecycleState(AppLifecycleState appLifecycleState) {
+    if (_isAutomaticPlayPauseHandled()) {
+      _appLifecycleState = appLifecycleState;
+
+      // NEW: Don't pause video if PiP is active
+      final isPipActive = _wasInPipMode; // Add this tracking variable
+
+      if (appLifecycleState == AppLifecycleState.resumed) {
+        if (_wasPlayingBeforePause == true &&
+            _isPlayerVisible &&
+            !isPipActive) {
+          play();
+        }
+      }
+      if (appLifecycleState == AppLifecycleState.paused) {
+        // NEW: Only pause if NOT in PiP mode
+        if (!isPipActive) {
+          _wasPlayingBeforePause ??= isPlaying();
+          pause();
+        }
+      }
+    }
+  }
+
+  // ignore: use_setters_to_change_properties
+  ///Setup overridden aspect ratio.
+  void setOverriddenAspectRatio(double aspectRatio) {
+    _overriddenAspectRatio = aspectRatio;
+  }
+
+  ///Get aspect ratio used in current video. If aspect ratio is null, then
+  ///aspect ratio from GadgetspidyPlayerConfiguration will be used. Otherwise
+  ///[_overriddenAspectRatio] will be used.
+  double? getAspectRatio() {
+    return _overriddenAspectRatio ?? gadgetspidyPlayerConfiguration.aspectRatio;
+  }
+
+  // ignore: use_setters_to_change_properties
+  ///Setup overridden fit.
+  void setOverriddenFit(BoxFit fit) {
+    _overriddenFit = fit;
+  }
+
+  ///Get fit used in current video. If fit is null, then fit from
+  ///GadgetspidyPlayerConfiguration will be used. Otherwise [_overriddenFit] will be
+  ///used.
+  BoxFit getFit() {
+    return _overriddenFit ?? gadgetspidyPlayerConfiguration.fit;
+  }
+
+  ///Enable Picture in Picture mode. Requires a global key of GadgetspidyPlayer widget.
+  ///Supported on iOS 14.0+ and Android 8.0+ with sufficient system requirements.
+  ///Works with all video formats including HLS/m3u8.
+  ///Now supports PiP activation from both normal and fullscreen modes.
+  Future<void> enablePictureInPicture(
+      GlobalKey gadgetspidyPlayerGlobalKey) async {
+    if (videoPlayerController == null) {
+      throw StateError("The data source has not been initialized");
+    }
+
+    _gadgetspidyPlayerGlobalKey = gadgetspidyPlayerGlobalKey;
+
+    final bool isPipSupported = await isPictureInPictureSupported();
+    if (isPipSupported) {
+      GadgetspidyPlayerUtils.log("Hiding controls before PiP activation");
+      setControlsVisibility(false);
+      // NEW: Set PiP state BEFORE enabling
+      _isPipActive = true;
+      _wasInPipMode = true;
+      // Add small delay to ensure controls are fully hidden before PiP capture
+      await Future.delayed(Duration(milliseconds: 100));
+      if (Platform.isAndroid) {
+        // Android implementation - supports PiP from any mode
+        _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.pipStart));
+        return videoPlayerController?.enablePictureInPicture();
+      }
+
+      if (Platform.isIOS) {
+        // iOS implementation for both iPhone and iPad - supports PiP from any mode
+        final RenderBox? renderBox = gadgetspidyPlayerGlobalKey.currentContext!
+            .findRenderObject() as RenderBox?;
+        if (renderBox == null) {
+          GadgetspidyPlayerUtils.log(
+              "Can't show PiP. RenderBox is null. Did you provide valid global key?");
+          return;
+        }
+
+        final Offset position = renderBox.localToGlobal(Offset.zero);
+        _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.pipStart));
+
+        return videoPlayerController?.enablePictureInPicture(
+          left: position.dx,
+          top: position.dy,
+          width: renderBox.size.width,
+          height: renderBox.size.height,
+        );
+      } else {
+        GadgetspidyPlayerUtils.log(
+            "Unsupported PiP in current platform."); // Restore controls if platform not supported
+        setControlsVisibility(true);
+      }
+    } else {
+      GadgetspidyPlayerUtils.log(
+          "Picture in picture is not supported in this device. "
+          "Requirements: iOS 14.0+ or Android 8.0+ with sufficient RAM and v2 embedding.");
+      // Restore controls if PiP not supported
+      setControlsVisibility(true);
+    }
+  }
+
+  ///Disable Picture in Picture mode if it's enabled.
+  Future<void>? disablePictureInPicture() {
+    if (videoPlayerController == null) {
+      throw StateError("The data source has not been initialized");
+    }
+    // NEW: Reset PiP state
+    _isPipActive = false;
+    _wasInPipMode = false;
+    // 🚀 SOLUTION: Show controls when PiP is manually disabled
+    GadgetspidyPlayerUtils.log("Showing controls after PiP disable");
+    setControlsVisibility(true);
+    _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.pipStop));
+    return videoPlayerController!.disablePictureInPicture();
+  }
+
+  // ignore: use_setters_to_change_properties
+  ///Set GlobalKey of GadgetspidyPlayer. Used in PiP methods called from controls.
+  void setGadgetspidyPlayerGlobalKey(GlobalKey gadgetspidyPlayerGlobalKey) {
+    _gadgetspidyPlayerGlobalKey = gadgetspidyPlayerGlobalKey;
+  }
+
+  ///Check if picture in picture mode is supported in this device.
+  ///Now supports PiP in both normal and fullscreen modes.
+  Future<bool> isPictureInPictureSupported() async {
+    if (videoPlayerController == null) {
+      return false;
+    }
+
+    final bool isPipSupported =
+        (await videoPlayerController!.isPictureInPictureSupported()) ?? false;
+
+    // PiP is now supported in both fullscreen and normal modes
+    return isPipSupported;
+  }
+
+  ///Enhanced method to handle PiP state changes and cleanup
+  ///Now properly handles fullscreen transitions when PiP is enabled/disabled
+  void _handlePictureInPictureStateChange(bool isInPip) {
+    if (isInPip) {
+      // Store current fullscreen state before entering PiP
+      _wasInFullscreenBeforePip = _isFullScreen;
+      _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.pipStart));
+    } else {
+      _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.pipStop));
+
+      // On Android, handle fullscreen state restoration based on previous state
+      if (Platform.isAndroid) {
+        // If PiP was started from normal mode and we want to return to normal mode
+        if (!_wasInFullscreenBeforePip && _isFullScreen) {
+          exitFullScreen();
+        }
+        // If PiP was started from fullscreen mode, remain in fullscreen
+        // This preserves user's original viewing preference
+      }
+    }
+  }
+
+  ///Handle VideoEvent when remote controls notification / PiP is shown
+  void _handleVideoEvent(VideoEvent event) async {
+    switch (event.eventType) {
+      case VideoEventType.play:
+        _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.play));
+        break;
+      case VideoEventType.pause:
+        _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.pause));
+        break;
+      case VideoEventType.seek:
+        _postEvent(GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.seekTo));
+        break;
+      case VideoEventType.completed:
+        final VideoPlayerValue? videoValue = videoPlayerController?.value;
+        _postEvent(
+          GadgetspidyPlayerEvent(
+            GadgetspidyPlayerEventType.finished,
+            parameters: <String, dynamic>{
+              _progressParameter: videoValue?.position,
+              _durationParameter: videoValue?.duration
+            },
+          ),
+        );
+        break;
+      case VideoEventType.bufferingStart:
+        _postEvent(
+            GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.bufferingStart));
+        break;
+      case VideoEventType.bufferingUpdate:
+        _postEvent(GadgetspidyPlayerEvent(
+            GadgetspidyPlayerEventType.bufferingUpdate,
+            parameters: <String, dynamic>{
+              _bufferedParameter: event.buffered,
+            }));
+        break;
+      case VideoEventType.bufferingEnd:
+        _postEvent(
+            GadgetspidyPlayerEvent(GadgetspidyPlayerEventType.bufferingEnd));
+        break;
+      default:
+
+        ///TODO: Handle when needed
+        break;
+    }
+  }
+
+  ///Setup controls always visible mode
+  void setControlsAlwaysVisible(bool controlsAlwaysVisible) {
+    _controlsAlwaysVisible = controlsAlwaysVisible;
+    _controlsVisibilityStreamController.add(controlsAlwaysVisible);
+  }
+
+  ///Retry data source if playback failed.
+  Future retryDataSource() async {
+    await _setupDataSource(_gadgetspidyPlayerDataSource!);
+    if (_videoPlayerValueOnError != null) {
+      final position = _videoPlayerValueOnError!.position;
+      await seekTo(position);
+      await play();
+      _videoPlayerValueOnError = null;
+    }
+  }
+
+  ///Set [audioTrack] in player. Works only for HLS or DASH streams.
+  void setAudioTrack(GadgetspidyPlayerAsmsAudioTrack audioTrack) {
+    if (videoPlayerController == null) {
+      throw StateError("The data source has not been initialized");
+    }
+
+    if (audioTrack.language == null) {
+      _gadgetspidyPlayerAsmsAudioTrack = null;
+      return;
+    }
+
+    _gadgetspidyPlayerAsmsAudioTrack = audioTrack;
+    videoPlayerController!.setAudioTrack(audioTrack.label, audioTrack.id);
+  }
+
+  ///Enable or disable audio mixing with other sound within device.
+  void setMixWithOthers(bool mixWithOthers) {
+    if (videoPlayerController == null) {
+      throw StateError("The data source has not been initialized");
+    }
+
+    videoPlayerController!.setMixWithOthers(mixWithOthers);
+  }
+
+  ///Clear all cached data. Video player controller must be initialized to
+  ///clear the cache.
+  Future<void> clearCache() async {
+    return VideoPlayerController.clearCache();
+  }
+
+  ///Build headers map that will be used to setup video player controller. Apply
+  ///DRM headers if available.
+  Map<String, String?> _getHeaders() {
+    final headers = gadgetspidyPlayerDataSource!.headers ?? {};
+    if (gadgetspidyPlayerDataSource?.drmConfiguration?.drmType ==
+            GadgetspidyPlayerDrmType.token &&
+        gadgetspidyPlayerDataSource?.drmConfiguration?.token != null) {
+      headers[_authorizationHeader] =
+          gadgetspidyPlayerDataSource!.drmConfiguration!.token!;
+    }
+    return headers;
+  }
+
+  ///PreCache a video. On Android, the future succeeds when
+  ///the requested size, specified in
+  ///[GadgetspidyPlayerCacheConfiguration.preCacheSize], is downloaded or when the
+  ///complete file is downloaded if the file is smaller than the requested size.
+  ///On iOS, the whole file will be downloaded, since [maxCacheFileSize] is
+  ///currently not supported on iOS. On iOS, the video format must be in this
+  ///list: https://github.com/sendyhalim/Swime/blob/master/Sources/MimeType.swift
+  Future<void> preCache(
+      GadgetspidyPlayerDataSource gadgetspidyPlayerDataSource) async {
+    final cacheConfig = gadgetspidyPlayerDataSource.cacheConfiguration ??
+        const GadgetspidyPlayerCacheConfiguration(useCache: true);
+
+    final dataSource = DataSource(
+      sourceType: DataSourceType.network,
+      uri: gadgetspidyPlayerDataSource.url,
+      useCache: true,
+      headers: gadgetspidyPlayerDataSource.headers,
+      maxCacheSize: cacheConfig.maxCacheSize,
+      maxCacheFileSize: cacheConfig.maxCacheFileSize,
+      cacheKey: cacheConfig.key,
+      videoExtension: gadgetspidyPlayerDataSource.videoExtension,
+    );
+
+    return VideoPlayerController.preCache(dataSource, cacheConfig.preCacheSize);
+  }
+
+  ///Stop pre cache for given [gadgetspidyPlayerDataSource]. If there was no pre
+  ///cache started for given [gadgetspidyPlayerDataSource] then it will be ignored.
+  Future<void> stopPreCache(
+      GadgetspidyPlayerDataSource gadgetspidyPlayerDataSource) async {
+    return VideoPlayerController.stopPreCache(gadgetspidyPlayerDataSource.url,
+        gadgetspidyPlayerDataSource.cacheConfiguration?.key);
+  }
+
+  /// Sets the new [gadgetspidyPlayerControlsConfiguration] instance in the
+  /// controller.
+  void setGadgetspidyPlayerControlsConfiguration(
+      GadgetspidyPlayerControlsConfiguration
+          gadgetspidyPlayerControlsConfiguration) {
+    this._gadgetspidyPlayerControlsConfiguration =
+        gadgetspidyPlayerControlsConfiguration;
+  }
+
+  /// Add controller internal event.
+  void _postControllerEvent(GadgetspidyPlayerControllerEvent event) {
+    if (!_controllerEventStreamController.isClosed) {
+      _controllerEventStreamController.add(event);
+    }
+  }
+
+  ///Dispose GadgetspidyPlayerController. When [forceDispose] parameter is true, then
+  ///autoDispose parameter will be overridden and controller will be disposed
+  ///(if it wasn't disposed before).
+  void dispose({bool forceDispose = false}) {
+    if (!gadgetspidyPlayerConfiguration.autoDispose && !forceDispose) {
+      return;
+    }
+    if (!_disposed) {
+      if (videoPlayerController != null) {
+        pause();
+        videoPlayerController!.removeListener(_onFullScreenStateChanged);
+        videoPlayerController!.removeListener(_onVideoPlayerChanged);
+        videoPlayerController!.dispose();
+      }
+      _eventListeners.clear();
+      _nextVideoTimer?.cancel();
+      _nextVideoTimeStreamController.close();
+      _controlsVisibilityStreamController.close();
+      _videoEventStreamSubscription?.cancel();
+      _disposed = true;
+      _controllerEventStreamController.close();
+
+      ///Delete files async
+      _tempFiles.forEach((file) => file.delete());
+    }
+  }
+}

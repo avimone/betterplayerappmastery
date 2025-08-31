@@ -5,8 +5,8 @@
 // Dart imports:
 import 'dart:async';
 import 'dart:io';
-import 'package:better_player/src/configuration/better_player_buffering_configuration.dart';
-import 'package:better_player/src/video_player/video_player_platform_interface.dart';
+import 'package:gadgetspidy_player/src/configuration/gadgetspidy_player_buffering_configuration.dart';
+import 'package:gadgetspidy_player/src/video_player/video_player_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -167,11 +167,12 @@ class VideoPlayerValue {
 ///
 /// After [dispose] all further calls are ignored.
 class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
-  final BetterPlayerBufferingConfiguration bufferingConfiguration;
+  final GadgetspidyPlayerBufferingConfiguration bufferingConfiguration;
 
   /// Constructs a [VideoPlayerController] and creates video controller on platform side.
   VideoPlayerController({
-    this.bufferingConfiguration = const BetterPlayerBufferingConfiguration(),
+    this.bufferingConfiguration =
+        const GadgetspidyPlayerBufferingConfiguration(),
     bool autoCreate = true,
   }) : super(VideoPlayerValue(duration: null)) {
     if (autoCreate) {

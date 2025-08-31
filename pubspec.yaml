@@ -1,4 +1,4 @@
-name: better_player
+name: gadgetspidy_player
 description: Advanced video player. It solves many typical use cases and it's easy to run.
 version: 0.0.84
 homepage: https://github.com/jhomlala/betterplayer
@@ -32,7 +32,7 @@ flutter:
   plugin:
     platforms:
       android:
-        package: com.jhomlala.better_player
-        pluginClass: BetterPlayerPlugin
+        package: com.gadgetspidy.gadgetspidy_player
+        pluginClass: GadgetspidyPlayerPlugin
       ios:
-        pluginClass: BetterPlayerPlugin
+        pluginClass: GadgetspidyPlayerPlugin
