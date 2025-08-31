@@ -1,13 +1,13 @@
-import 'package:better_player/better_player.dart';
-import 'package:better_player/src/core/better_player_with_controls.dart';
+import 'package:gadgetspidy_player/gadgetspidy_player.dart';
+import 'package:gadgetspidy_player/src/core/gadgetspidy_player_with_controls.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
-import 'better_player_mock_controller.dart';
+import 'gadgetspidy_player_mock_controller.dart';
 
 void main() {
-  late BetterPlayerMockController _mockController;
+  late GadgetspidyPlayerMockController _mockController;
 
   setUpAll(() {
     VisibilityDetectorController.instance.updateInterval = Duration.zero;
@@ -15,22 +15,22 @@ void main() {
 
   setUp(() {
     _mockController =
-        BetterPlayerMockController(const BetterPlayerConfiguration());
+        GadgetspidyPlayerMockController(const GadgetspidyPlayerConfiguration());
   });
 
   testWidgets(
-    "One of children is BetterPlayerWithControls",
+    "One of children is GadgetspidyPlayerWithControls",
     (WidgetTester tester) async {
       await tester.pumpWidget(
         _wrapWidget(
-          BetterPlayer(
+          GadgetspidyPlayer(
             controller: _mockController,
           ),
         ),
       );
       expect(
           find.byWidgetPredicate(
-              (widget) => widget is BetterPlayerWithControls),
+              (widget) => widget is GadgetspidyPlayerWithControls),
           findsOneWidget);
     },
   );

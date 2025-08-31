@@ -1,10 +1,10 @@
-import 'package:better_player/better_player.dart';
-import 'package:better_player/src/video_player/video_player.dart';
+import 'package:gadgetspidy_player/gadgetspidy_player.dart';
+import 'package:gadgetspidy_player/src/video_player/video_player.dart';
 
-import 'better_player_mock_controller.dart';
+import 'gadgetspidy_player_mock_controller.dart';
 import 'mock_video_player_controller.dart';
 
-class BetterPlayerTestUtils {
+class GadgetspidyPlayerTestUtils {
   static const String bugBuckBunnyVideoUrl =
       "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
   static const String forBiggerBlazesUrl =
@@ -12,10 +12,10 @@ class BetterPlayerTestUtils {
   static const String elephantDreamStreamUrl =
       "http://cdn.theoplayer.com/video/elephants-dream/playlist.m3u8";
 
-  static BetterPlayerMockController setupBetterPlayerMockController(
+  static GadgetspidyPlayerMockController setupGadgetspidyPlayerMockController(
       {VideoPlayerController? controller}) {
     final mockController =
-        BetterPlayerMockController(const BetterPlayerConfiguration());
+        GadgetspidyPlayerMockController(const GadgetspidyPlayerConfiguration());
     if (controller != null) {
       mockController.videoPlayerController = controller;
     }
@@ -25,7 +25,7 @@ class BetterPlayerTestUtils {
   static MockVideoPlayerController setupMockVideoPlayerControler() {
     final mockVideoPlayerController = MockVideoPlayerController();
     mockVideoPlayerController
-        .setNetworkDataSource(BetterPlayerTestUtils.forBiggerBlazesUrl);
+        .setNetworkDataSource(GadgetspidyPlayerTestUtils.forBiggerBlazesUrl);
     return mockVideoPlayerController;
   }
 }
