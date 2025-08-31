@@ -211,15 +211,33 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
 
   @override
   Future<DateTime?> getAbsolutePosition(int? textureId) async {
-    final int milliseconds = await _channel.invokeMethod<int>(
-          'absolutePosition',
-          <String, dynamic>{'textureId': textureId},
-        ) ??
-        0;
+    try {
+      final int milliseconds = await _channel.invokeMethod<int>(
+            'absolutePosition',
+            <String, dynamic>{'textureId': textureId},
+          ) ??
+          0;
 
-    if (milliseconds <= 0) return null;
+      if (milliseconds <= 0) return null;
 
-    return DateTime.fromMillisecondsSinceEpoch(milliseconds);
+      // 🚀 FIX: Add validation for DateTime range before creating DateTime
+      // Valid range for DateTime: -8640000000000000 to 8640000000000000
+      const int maxValidMilliseconds =
+          8640000000000000 - 1000000; // Leave buffer
+      const int minValidMilliseconds = -8640000000000000 + 1000000;
+
+      if (milliseconds > maxValidMilliseconds ||
+          milliseconds < minValidMilliseconds) {
+        GadgetspidyPlayerUtils.log(
+            "Invalid timestamp for DateTime: $milliseconds, skipping absolutePosition");
+        return null;
+      }
+
+      return DateTime.fromMillisecondsSinceEpoch(milliseconds);
+    } catch (e) {
+      GadgetspidyPlayerUtils.log("Error getting absolute position: $e");
+      return null;
+    }
   }
 
   @override
