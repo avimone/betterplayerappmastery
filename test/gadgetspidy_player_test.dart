@@ -10,7 +10,7 @@ void main() {
     VisibilityDetectorController.instance.updateInterval = Duration.zero;
   });
 
-  testWidgets("Better Player simple player - network",
+  testWidgets("GadgetspidyPlayer simple player - network",
       (WidgetTester tester) async {
     await tester.pumpWidget(_wrapWidget(GadgetspidyPlayer.network(
         GadgetspidyPlayerTestUtils.bugBuckBunnyVideoUrl)));
@@ -18,7 +18,7 @@ void main() {
         findsOneWidget);
   });
 
-  testWidgets("Better Player simple player - file",
+  testWidgets("GadgetspidyPlayer simple player - file",
       (WidgetTester tester) async {
     await tester.pumpWidget(_wrapWidget(GadgetspidyPlayer.network(
         GadgetspidyPlayerTestUtils.bugBuckBunnyVideoUrl)));
