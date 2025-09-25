@@ -6,6 +6,7 @@ import 'package:better_player/src/core/better_player_utils.dart';
 import 'package:collection/collection.dart' show IterableExtension;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 ///Base class for both material and cupertino controls
 abstract class BetterPlayerControlsState<T extends StatefulWidget>
@@ -180,14 +181,97 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget>
     ]);
   }
 
+  void _showSpeedErrorDialog(String message) {
+    final context =
+        betterPlayerController?.betterPlayerGlobalKey?.currentContext ??
+            this.context;
+
+    if (Platform.isIOS) {
+      // Use Cupertino-style dialog for iOS
+      showCupertinoDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return CupertinoAlertDialog(
+            title: Text(
+              'Playback Speed',
+              style: TextStyle(
+                color: CupertinoColors.label.resolveFrom(context),
+              ),
+            ),
+            content: Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: CupertinoColors.label.resolveFrom(context),
+                ),
+              ),
+            ),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(
+                  'OK',
+                  style: TextStyle(
+                    color: CupertinoColors.activeBlue.resolveFrom(context),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    } else {
+      // Fallback to Material dialog for other platforms (shouldn't happen in Cupertino controls)
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Playback Speed'),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+    }
+  }
+
   Widget _buildSpeedRow(double value) {
     final bool isSelected =
         betterPlayerController!.videoPlayerController!.value.speed == value;
 
     return BetterPlayerMaterialClickableWidget(
-      onTap: () {
+      onTap: () async {
         Navigator.of(context).pop();
-        betterPlayerController!.setSpeed(value);
+        // Add iOS-specific error handling for speed changes
+        try {
+          await betterPlayerController!.setSpeed(value);
+        } on PlatformException catch (e) {
+          // Handle iOS-specific speed limitation errors
+          if (Platform.isIOS &&
+              (e.code == 'unsupported_fast_forward' ||
+                  e.code == 'unsupported_slow_forward' ||
+                  e.code == 'unsupported_speed')) {
+            _showSpeedErrorDialog(
+                e.message ?? 'This video does not support speed changes');
+          } else {
+            // Re-throw other platform exceptions
+            rethrow;
+          }
+        } catch (e) {
+          // Handle any other unexpected errors
+          if (Platform.isIOS) {
+            _showSpeedErrorDialog(
+                'Unable to change playback speed for this video');
+          } else {
+            rethrow;
+          }
+        }
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
