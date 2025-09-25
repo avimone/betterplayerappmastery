@@ -543,7 +543,9 @@ class _BetterPlayerCupertinoControlsState
             ),
           const SizedBox(width: 4),
 
-          if (_controlsConfiguration.enableFullscreen)
+          // Hide expand button if fullScreenButtonExit is true (since it would do the same as close button)
+          if (_controlsConfiguration.enableFullscreen &&
+              !_controlsConfiguration.fullScreenButtonExit)
             _buildExpandButton(
               backgroundColor,
               iconColor,
