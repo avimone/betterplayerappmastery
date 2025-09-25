@@ -6,6 +6,7 @@ import 'package:better_player/src/core/better_player_utils.dart';
 import 'package:collection/collection.dart' show IterableExtension;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 ///Base class for both material and cupertino controls
 abstract class BetterPlayerControlsState<T extends StatefulWidget>
@@ -21,7 +22,87 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget>
 
   bool controlsNotVisible = true;
 
+  bool _isSpeedSupported = true; // Default to true, will be tested
+  bool _hasTestedSpeedSupport = false;
+
   void cancelAndRestartTimer();
+
+  bool get shouldShowSpeedControls =>
+      betterPlayerControlsConfiguration.enablePlaybackSpeed &&
+      _isSpeedSupported;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Listen for video initialization to test speed support
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _setupSpeedTestingListener();
+    });
+  }
+
+  void _setupSpeedTestingListener() {
+    betterPlayerController?.videoPlayerController?.addListener(() {
+      if (betterPlayerController?.videoPlayerController?.value.initialized ==
+              true &&
+          !_hasTestedSpeedSupport) {
+        // Delay the test slightly to ensure video is fully ready
+        Future.delayed(Duration(milliseconds: 800), () {
+          _testSpeedSupport();
+        });
+      }
+    });
+  }
+
+  Future<void> _testSpeedSupport() async {
+    if (_hasTestedSpeedSupport) return;
+    if (betterPlayerController?.videoPlayerController == null) return;
+    if (betterPlayerController?.videoPlayerController?.value.initialized !=
+        true) return;
+
+    try {
+      final originalSpeed =
+          betterPlayerController!.videoPlayerController!.value.speed;
+
+      // Test with a small speed change
+      await betterPlayerController!.setSpeed(1.25);
+      await Future.delayed(Duration(milliseconds: 150));
+
+      // Reset to original speed
+      await betterPlayerController!.setSpeed(originalSpeed);
+
+      // If we get here without exception, speed is supported
+      _isSpeedSupported = true;
+      BetterPlayerUtils.log("Speed controls are supported for this video");
+    } on PlatformException catch (e) {
+      if (e.code.contains('unsupported')) {
+        _isSpeedSupported = false;
+        BetterPlayerUtils.log(
+            "Speed not supported for this video: ${e.message}");
+      } else {
+        _isSpeedSupported = true; // Assume supported for other errors
+      }
+    } catch (e) {
+      _isSpeedSupported = true; // Assume supported for other errors
+      BetterPlayerUtils.log("Speed test error (assuming supported): $e");
+    }
+
+    _hasTestedSpeedSupport = true;
+
+    // Trigger UI rebuild to hide/show speed controls
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  // Add method to reset speed testing when datasource changes
+  void resetSpeedTesting() {
+    _hasTestedSpeedSupport = false;
+    _isSpeedSupported = true; // Reset to default
+    if (mounted) {
+      setState(() {});
+    }
+  }
 
   bool isVideoFinished(VideoPlayerValue? videoPlayerValue) {
     return videoPlayerValue?.position != null &&
@@ -59,7 +140,17 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget>
   }
 
   void onShowMoreClicked() {
-    _showModalBottomSheet([_buildMoreOptionsList()]);
+    // Test speed support before showing menu if not already tested and video is ready
+    if (!_hasTestedSpeedSupport &&
+        betterPlayerController?.videoPlayerController?.value.initialized ==
+            true) {
+      _testSpeedSupport().then((_) {
+        // Show the menu after testing is complete
+        _showModalBottomSheet([_buildMoreOptionsList()]);
+      });
+    } else {
+      _showModalBottomSheet([_buildMoreOptionsList()]);
+    }
   }
 
   void onVideoTracksClicked() async {
@@ -97,7 +188,8 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget>
       child: Container(
         child: Column(
           children: [
-            if (betterPlayerControlsConfiguration.enablePlaybackSpeed)
+            // MODIFIED: Use shouldShowSpeedControls instead of enablePlaybackSpeed
+            if (shouldShowSpeedControls)
               _buildMoreOptionsListRow(
                   betterPlayerControlsConfiguration.playbackSpeedIcon,
                   translations.overflowMenuPlaybackSpeed, () {
@@ -185,9 +277,57 @@ abstract class BetterPlayerControlsState<T extends StatefulWidget>
         betterPlayerController!.videoPlayerController!.value.speed == value;
 
     return BetterPlayerMaterialClickableWidget(
-      onTap: () {
+      onTap: () async {
         Navigator.of(context).pop();
-        betterPlayerController!.setSpeed(value);
+
+        try {
+          await betterPlayerController!.setSpeed(value);
+        } on PlatformException catch (e) {
+          if (e.code.contains('unsupported')) {
+            // If speed fails during usage, mark as unsupported and hide controls
+            _isSpeedSupported = false;
+            _hasTestedSpeedSupport = true;
+            if (mounted) setState(() {});
+
+            // Show user-friendly message
+            final context = this.context;
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                      'This video does not support playback speed changes'),
+                  backgroundColor: Colors.orange,
+                  duration: Duration(seconds: 3),
+                ),
+              );
+            }
+          } else {
+            // Show generic error for other platform exceptions
+            final context = this.context;
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content:
+                      Text('Failed to change playback speed: ${e.message}'),
+                  backgroundColor: Colors.red,
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          }
+        } catch (e) {
+          // Show generic error for other exceptions
+          final context = this.context;
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to change playback speed'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        }
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
