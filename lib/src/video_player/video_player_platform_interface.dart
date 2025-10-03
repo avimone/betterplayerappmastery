@@ -137,9 +137,13 @@ abstract class VideoPlayerPlatform {
     throw UnimplementedError('getAbsolutePosition() has not been implemented.');
   }
 
+  /// Sets whether PiP should auto-enter on user leave hint (Android 12+)
+  Future<void> setAutoEnterPip(bool enabled);
+
   ///Enables PiP mode.
-  Future<void> enablePictureInPicture(int? textureId, double? top, double? left,
-      double? width, double? height) {
+  Future<void> enablePictureInPicture(
+      int? textureId, double? top, double? left, double? width, double? height,
+      {bool autoEnterEnabled = false}) {
     throw UnimplementedError(
         'enablePictureInPicture() has not been implemented.');
   }

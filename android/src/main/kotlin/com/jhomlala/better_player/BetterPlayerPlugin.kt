@@ -103,6 +103,11 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             return
         }
         when (call.method) {
+            "setAutoEnterPip" -> {
+                val autoEnterEnabled = getParameter(call.arguments, "autoEnterEnabled", false)
+                setPictureInPictureParams(autoEnterEnabled)
+                result.success(null)
+            }
             INIT_METHOD -> disposeAllPlayers()
             CREATE_METHOD -> {
                 val handle = flutterState!!.textureRegistry!!.createSurfaceTexture()
@@ -155,6 +160,11 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         when (call.method) {
             SET_DATA_SOURCE_METHOD -> {
                 setDataSource(call, result, player)
+                val autoEnterEnabled = getParameter(call.arguments, "autoEnterEnabled", false)
+                 if (autoEnterEnabled) {
+                     setPictureInPictureParams(true)
+                }
+                result.success(null)
             }
             SET_LOOPING_METHOD -> {
                 player.setLooping(call.argument(LOOPING_PARAMETER)!!)
@@ -196,7 +206,11 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                 result.success(null)
             }
             ENABLE_PICTURE_IN_PICTURE_METHOD -> {
-                enablePictureInPicture(player)
+                val player = videoPlayers[getParameter(call.arguments, TEXTURE_ID_PARAMETER, -1L)]
+                val autoEnterEnabled = getParameter(call.arguments, "autoEnterEnabled", false)
+                if (player != null) {
+                    enablePictureInPicture(player, autoEnterEnabled)
+                }
                 result.success(null)
             }
             DISABLE_PICTURE_IN_PICTURE_METHOD -> {
@@ -412,7 +426,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             .hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
     }
 
-private fun enablePictureInPicture(player: BetterPlayer) {
+private fun enablePictureInPicture(player: BetterPlayer, autoEnterEnabled: Boolean = false) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         try {
             // 🚀 FIX: Setup media session but disable controls for clean PiP
@@ -434,7 +448,7 @@ private fun enablePictureInPicture(player: BetterPlayer) {
             
             // Enable auto-enter PiP on user leave hint for Android 12+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                pipParamsBuilder.setAutoEnterEnabled(false)
+                pipParamsBuilder.setAutoEnterEnabled(autoEnterEnabled)
             }
             
             // Support seamless resize for better transition from fullscreen
@@ -559,8 +573,29 @@ private fun updatePipActions() {
     }
 }
 
+private fun setPictureInPictureParams(autoEnterEnabled: Boolean) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        try {
+            val aspectRatio = Rational(16, 9)
+            val pipParamsBuilder = PictureInPictureParams.Builder()
+                .setAspectRatio(aspectRatio)
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                pipParamsBuilder.setAutoEnterEnabled(autoEnterEnabled)
+                pipParamsBuilder.setSeamlessResizeEnabled(true)
+            }
+            
+            activity?.setPictureInPictureParams(pipParamsBuilder.build())
+            Log.d(TAG, "Updated PiP params - AutoEnter: $autoEnterEnabled")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error setting PiP params", e)
+        }
+    }
+}
 
     private fun dispose(player: BetterPlayer, textureId: Long) {
+        // Disable auto-enter PiP before disposing
+        setPictureInPictureParams(false)
         player.dispose()
         videoPlayers.remove(textureId)
         dataSources.remove(textureId)

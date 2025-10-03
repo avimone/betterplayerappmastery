@@ -279,6 +279,14 @@ class BetterPlayerController {
     ///Process data source
     await _setupDataSource(betterPlayerDataSource);
     setTrack(BetterPlayerAsmsTrack.defaultTrack());
+    // Enable auto-enter PiP if configured (Android only)
+    if (Platform.isAndroid) {
+      final autoEnter = betterPlayerConfiguration
+          .controlsConfiguration.pipConfiguration.autoEnterOnUserLeaveHint;
+      if (autoEnter) {
+        await videoPlayerController?.setAutoEnterPip(true);
+      }
+    }
   }
 
   ///Configure subtitles based on subtitles source.
@@ -1119,7 +1127,10 @@ class BetterPlayerController {
       if (Platform.isAndroid) {
         // Android implementation - supports PiP from any mode
         _postEvent(BetterPlayerEvent(BetterPlayerEventType.pipStart));
-        return videoPlayerController?.enablePictureInPicture();
+        final autoEnterEnabled = betterPlayerConfiguration
+            .controlsConfiguration.pipConfiguration.autoEnterOnUserLeaveHint;
+        return videoPlayerController?.enablePictureInPicture(
+            autoEnterEnabled: autoEnterEnabled);
       }
 
       if (Platform.isIOS) {
@@ -1370,6 +1381,10 @@ class BetterPlayerController {
       return;
     }
     if (!_disposed) {
+      // Disable auto-enter PiP before disposing (Android only)
+      if (Platform.isAndroid) {
+        videoPlayerController?.setAutoEnterPip(false);
+      }
       if (videoPlayerController != null) {
         pause();
         videoPlayerController!.removeListener(_onFullScreenStateChanged);

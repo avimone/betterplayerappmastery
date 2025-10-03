@@ -241,8 +241,14 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
   }
 
   @override
-  Future<void> enablePictureInPicture(int? textureId, double? top, double? left,
-      double? width, double? height) async {
+  Future<void> enablePictureInPicture(
+    int? textureId,
+    double? top,
+    double? left,
+    double? width,
+    double? height, {
+    bool autoEnterEnabled = false,
+  }) async {
     return _channel.invokeMethod<void>(
       'enablePictureInPicture',
       <String, dynamic>{
@@ -251,8 +257,16 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
         'left': left,
         'width': width,
         'height': height,
+        'autoEnterEnabled': autoEnterEnabled,
       },
     );
+  }
+
+  @override
+  Future<void> setAutoEnterPip(bool enabled) {
+    return _channel.invokeMethod<void>('setAutoEnterPip', <String, dynamic>{
+      'autoEnterEnabled': enabled,
+    });
   }
 
   @override

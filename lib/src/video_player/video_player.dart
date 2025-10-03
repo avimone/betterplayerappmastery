@@ -607,8 +607,17 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
         _textureId, width, height, bitrate);
   }
 
-  Future<void> enablePictureInPicture(
-      {double? top, double? left, double? width, double? height}) async {
+  Future<void> setAutoEnterPip(bool enabled) async {
+    await _videoPlayerPlatform.setAutoEnterPip(enabled);
+  }
+
+  Future<void> enablePictureInPicture({
+    double? top,
+    double? left,
+    double? width,
+    double? height,
+    bool autoEnterEnabled = false,
+  }) async {
     await _videoPlayerPlatform.enablePictureInPicture(
         textureId, top, left, width, height);
   }
