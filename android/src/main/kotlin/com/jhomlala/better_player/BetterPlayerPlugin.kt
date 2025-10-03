@@ -434,7 +434,7 @@ private fun enablePictureInPicture(player: BetterPlayer) {
             
             // Enable auto-enter PiP on user leave hint for Android 12+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                pipParamsBuilder.setAutoEnterEnabled(false)
+                pipParamsBuilder.setAutoEnterEnabled(true)
             }
             
             // Support seamless resize for better transition from fullscreen
@@ -561,6 +561,20 @@ private fun updatePipActions() {
 
 
     private fun dispose(player: BetterPlayer, textureId: Long) {
+            // 🚀 Disable auto-enter PiP before disposing
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        try {
+            val pipParamsBuilder = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(16, 9))
+                .setAutoEnterEnabled(false) // ✅ Disable it
+                .setSeamlessResizeEnabled(true)
+            
+            activity?.setPictureInPictureParams(pipParamsBuilder.build())
+            Log.d(TAG, "Auto-enter PiP disabled on dispose")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disabling auto-enter PiP: ${e.message}")
+        }
+    }
         player.dispose()
         videoPlayers.remove(textureId)
         dataSources.remove(textureId)
