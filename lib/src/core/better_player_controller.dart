@@ -281,8 +281,7 @@ class BetterPlayerController {
     setTrack(BetterPlayerAsmsTrack.defaultTrack());
     // Enable auto-enter PiP if configured (Android only)
     if (Platform.isAndroid) {
-      final autoEnter = betterPlayerConfiguration
-          .controlsConfiguration.pipConfiguration.autoEnterOnUserLeaveHint;
+      final autoEnter = true;
       if (autoEnter) {
         await videoPlayerController?.setAutoEnterPip(true);
       }
