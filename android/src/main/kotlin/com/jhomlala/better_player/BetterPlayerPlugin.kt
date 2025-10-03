@@ -167,6 +167,8 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             PLAY_METHOD -> {
                 setupNotification(player)
                 player.play()
+                // Enable auto-enter PiP when video starts playing
+                setPictureInPictureParams(true)
                 result.success(null)
             }
             PAUSE_METHOD -> {
@@ -558,23 +560,25 @@ private fun updatePipActions() {
         Log.w(TAG, "Could not update PiP actions", e)
     }
 }
-
-
-    private fun dispose(player: BetterPlayer, textureId: Long) {
-            // 🚀 Disable auto-enter PiP before disposing
+private fun setPictureInPictureParams(autoEnterEnabled: Boolean) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         try {
             val pipParamsBuilder = PictureInPictureParams.Builder()
                 .setAspectRatio(Rational(16, 9))
-                .setAutoEnterEnabled(false) // ✅ Disable it
+                .setAutoEnterEnabled(autoEnterEnabled)
                 .setSeamlessResizeEnabled(true)
             
             activity?.setPictureInPictureParams(pipParamsBuilder.build())
-            Log.d(TAG, "Auto-enter PiP disabled on dispose")
+            Log.d(TAG, "PiP params updated - AutoEnter: $autoEnterEnabled")
         } catch (e: Exception) {
-            Log.e(TAG, "Error disabling auto-enter PiP: ${e.message}")
+            Log.e(TAG, "Error setting PiP params: ${e.message}")
         }
     }
+}
+
+    private fun dispose(player: BetterPlayer, textureId: Long) {
+        // Disable auto-enter PiP before disposing
+        setPictureInPictureParams(false)
         player.dispose()
         videoPlayers.remove(textureId)
         dataSources.remove(textureId)
