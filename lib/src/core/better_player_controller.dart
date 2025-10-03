@@ -725,6 +725,24 @@ class BetterPlayerController {
     );
   }
 
+  ///Enable automatic Picture in Picture when user presses home button
+  Future<void> enableAutoPictureInPicture() async {
+    if (videoPlayerController == null) {
+      throw StateError("The data source has not been initialized");
+    }
+
+    return videoPlayerController?.enableAutoPictureInPicture();
+  }
+
+  ///Disable automatic Picture in Picture
+  Future<void> disableAutoPictureInPicture() async {
+    if (videoPlayerController == null) {
+      throw StateError("The data source has not been initialized");
+    }
+
+    return videoPlayerController?.disableAutoPictureInPicture();
+  }
+
   ///Flag which determines whenever player is playing or not.
   bool? isPlaying() {
     if (videoPlayerController == null) {

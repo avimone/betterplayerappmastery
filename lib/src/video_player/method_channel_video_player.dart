@@ -241,6 +241,22 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
   }
 
   @override
+  Future<void> enableAutoPictureInPicture(int? textureId) {
+    return _channel.invokeMethod<void>(
+      'enableAutoPip',
+      <String, dynamic>{'textureId': textureId},
+    );
+  }
+
+  @override
+  Future<void> disableAutoPictureInPicture(int? textureId) {
+    return _channel.invokeMethod<void>(
+      'disableAutoPip',
+      <String, dynamic>{'textureId': textureId},
+    );
+  }
+
+  @override
   Future<void> enablePictureInPicture(int? textureId, double? top, double? left,
       double? width, double? height) async {
     return _channel.invokeMethod<void>(

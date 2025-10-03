@@ -391,6 +391,16 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     );
   }
 
+  ///Enable automatic Picture in Picture on home button press
+  Future<void> enableAutoPictureInPicture() {
+    return _videoPlayerPlatform.enableAutoPictureInPicture(_textureId);
+  }
+
+  ///Disable automatic Picture in Picture
+  Future<void> disableAutoPictureInPicture() {
+    return _videoPlayerPlatform.disableAutoPictureInPicture(_textureId);
+  }
+
   Future<void> _setDataSource(DataSource dataSourceDescription) async {
     if (_isDisposed) {
       return;

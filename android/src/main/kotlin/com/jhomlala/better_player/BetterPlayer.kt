@@ -113,7 +113,67 @@ internal class BetterPlayer(
         workManager = WorkManager.getInstance(context)
         workerObserverMap = HashMap()
         setupVideoPlayer(eventChannel, textureEntry, result)
+        // Register lifecycle callbacks
+        (context.applicationContext as? Application)?.registerActivityLifecycleCallbacks(this)
     }
+
+    fun enableAutoPip() {
+        autoPipEnabled = true
+        Log.d(TAG, "✅ Auto PiP enabled for texture: ${textureEntry.id()}")
+    }
+    
+    fun disableAutoPip() {
+        autoPipEnabled = false
+        Log.d(TAG, "🔒 Auto PiP disabled for texture: ${textureEntry.id()}")
+    }
+       override fun onActivityPaused(activity: Activity) {
+        if (currentActivity == activity && autoPipEnabled && !isPipTransitioning) {
+            // User pressed home button - enter PiP automatically
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    exoPlayer?.let {
+                        if (it.isPlaying || it.playbackState == Player.STATE_READY) {
+                            isPipTransitioning = true
+                            
+                            val aspectRatio = Rational(16, 9)
+                            val pipParams = PictureInPictureParams.Builder()
+                                .setAspectRatio(aspectRatio)
+                                .build()
+                            
+                            val entered = activity.enterPictureInPictureMode(pipParams)
+                            if (entered) {
+                                Log.d(TAG, "📺 Auto-entered PiP mode")
+                                startPictureInPictureListenerTimer(this)
+                                onPictureInPictureStatusChanged(true)
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to auto-enter PiP: ${e.message}")
+                    isPipTransitioning = false
+                }
+            }
+        }
+    }
+    
+    override fun onActivityResumed(activity: Activity) {
+        currentActivity = activity
+        isPipTransitioning = false
+    }
+    
+    override fun onActivityStarted(activity: Activity) {
+        currentActivity = activity
+    }
+    
+    override fun onActivityStopped(activity: Activity) {}
+    override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
+    override fun onActivityDestroyed(activity: Activity) {
+        if (currentActivity == activity) {
+            currentActivity = null
+        }
+    }
+
+    override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
 
     fun setDataSource(
         context: Context,
@@ -822,6 +882,12 @@ fun disposeMediaSession() {
 
 fun dispose() {
     try {
+        // Disable auto PiP first
+        disableAutoPip()
+            
+        // Unregister lifecycle callbacks
+        (context.applicationContext as? Application)?.unregisterActivityLifecycleCallbacks(this)
+        
         // Stop the player first
         if (isInitialized) {
             exoPlayer?.stop()

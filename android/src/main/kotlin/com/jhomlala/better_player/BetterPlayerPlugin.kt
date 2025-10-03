@@ -130,6 +130,20 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             PRE_CACHE_METHOD -> preCache(call, result)
             STOP_PRE_CACHE_METHOD -> stopPreCache(call, result)
             CLEAR_CACHE_METHOD -> clearCache(result)
+            
+            "enableAutoPip" -> {
+            val textureId = call.argument<Any>("textureId") as Long
+            val player = videoPlayers[textureId]
+            player?.enableAutoPip()
+            result.success(null)
+           }
+
+           "disableAutoPip" -> {
+            val textureId = call.argument<Any>("textureId") as Long
+            val player = videoPlayers[textureId]
+            player?.disableAutoPip()
+            result.success(null)
+            }
             else -> {
                 val textureId = (call.argument<Any>(TEXTURE_ID_PARAMETER) as Number?)!!.toLong()
                 val player = videoPlayers[textureId]

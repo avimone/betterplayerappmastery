@@ -466,7 +466,23 @@ bool _remoteCommandsInitialized = false;
                 }
             }
             result(nil);
-        } else {
+        }
+        else if ([@"enableAutoPip" isEqualToString:call.method]) {
+            NSNumber* textureId = call.arguments[@"textureId"];
+            BetterPlayer* player = _players[textureId];
+            if (player) {
+                [player enableAutoPip];
+            }
+            result(nil);
+        } else if ([@"disableAutoPip" isEqualToString:call.method]) {
+            NSNumber* textureId = call.arguments[@"textureId"];
+            BetterPlayer* player = _players[textureId];
+            if (player) {
+                [player disableAutoPip];
+            }
+            result(nil);
+        }
+         else {
             result(FlutterMethodNotImplemented);
         }
     }

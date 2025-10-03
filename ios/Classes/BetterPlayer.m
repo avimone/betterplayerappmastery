@@ -27,12 +27,22 @@ AVPictureInPictureController *_pipController;
     _isPlaying = false;
     _disposed = false;
     _player = [[AVPlayer alloc] init];
+    _autoPipEnabled = NO;
+    _isDisposing = NO;
     _player.actionAtItemEnd = AVPlayerActionAtItemEndNone;
     ///Fix for loading large videos
     if (@available(iOS 10.0, *)) {
         _player.automaticallyWaitsToMinimizeStalling = false;
     }
     self._observersAdded = false;
+      [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(appDidEnterBackground:)
+                                                     name:UIApplicationDidEnterBackgroundNotification
+                                                   object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(appWillEnterForeground:)
+                                                     name:UIApplicationWillEnterForegroundNotification
+                                                   object:nil];
     return self;
 }
 
@@ -40,6 +50,36 @@ AVPictureInPictureController *_pipController;
     BetterPlayerView *playerView = [[BetterPlayerView alloc] initWithFrame:CGRectZero];
     playerView.player = _player;
     return playerView;
+}
+
+- (void)enableAutoPip {
+    _autoPipEnabled = YES;
+    NSLog(@"✅ Auto PiP enabled");
+}
+
+- (void)disableAutoPip {
+    _autoPipEnabled = NO;
+    NSLog(@"🔒 Auto PiP disabled");
+}
+
+- (void)appDidEnterBackground:(NSNotification *)notification {
+    if (_autoPipEnabled && !_isDisposing && _player.rate > 0) {
+        // User pressed home button - enter PiP automatically
+        if (@available(iOS 14.2, *)) {
+            if (_pipController && [AVPictureInPictureController isPictureInPictureSupported]) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (![self->_pipController isPictureInPictureActive]) {
+                        [self->_pipController startPictureInPicture];
+                        NSLog(@"📺 Auto-entered PiP mode");
+                    }
+                });
+            }
+        }
+    }
+}
+
+- (void)appWillEnterForeground:(NSNotification *)notification {
+    // Optional: Handle returning from background if needed
 }
 
 - (void)addObservers:(AVPlayerItem*)item {
@@ -835,6 +875,20 @@ restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:(void (^)(BOOL)
 }
 
 - (void)dispose {
+    // Set disposing flag
+    _isDisposing = YES;
+    
+    // Disable auto PiP first
+    [self disableAutoPip];
+    
+    // Remove notification observers
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:UIApplicationDidEnterBackgroundNotification
+                                                  object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:UIApplicationWillEnterForegroundNotification
+                                                  object:nil];
+                                                      
     [self pause];
     [self disposeSansEventChannel];
     [_eventChannel setStreamHandler:nil];

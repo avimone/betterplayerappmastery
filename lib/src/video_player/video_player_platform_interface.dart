@@ -65,6 +65,18 @@ abstract class VideoPlayerPlatform {
     throw UnimplementedError('dispose() has not been implemented.');
   }
 
+  ///Enable automatic Picture in Picture when app goes to background
+  Future<void> enableAutoPictureInPicture(int? textureId) {
+    throw UnimplementedError(
+        'enableAutoPictureInPicture() has not been implemented.');
+  }
+
+  ///Disable automatic Picture in Picture
+  Future<void> disableAutoPictureInPicture(int? textureId) {
+    throw UnimplementedError(
+        'disableAutoPictureInPicture() has not been implemented.');
+  }
+
   /// Creates an instance of a video player and returns its textureId.
   Future<int?> create(
       {BetterPlayerBufferingConfiguration? bufferingConfiguration}) {
