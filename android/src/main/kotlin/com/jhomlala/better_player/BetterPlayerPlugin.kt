@@ -103,11 +103,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             return
         }
         when (call.method) {
-            "setAutoEnterPip" -> {
-                val autoEnterEnabled = getParameter(call.arguments, "autoEnterEnabled", false)
-                setPictureInPictureParams(autoEnterEnabled)
-                result.success(null)
-            }
+           
             INIT_METHOD -> disposeAllPlayers()
             CREATE_METHOD -> {
                 val handle = flutterState!!.textureRegistry!!.createSurfaceTexture()
@@ -158,13 +154,21 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         player: BetterPlayer
     ) {
         when (call.method) {
+            "setAutoEnterPip" -> {
+             // Fix: Cast to Map first
+                val args = call.arguments as? Map<String, Any?>
+                val autoEnterEnabled = getParameter(args, "autoEnterEnabled", false)
+                setPictureInPictureParams(autoEnterEnabled)
+                result.success(null)
+            }
             SET_DATA_SOURCE_METHOD -> {
                 setDataSource(call, result, player)
-                val autoEnterEnabled = getParameter(call.arguments, "autoEnterEnabled", false)
-                 if (autoEnterEnabled) {
-                     setPictureInPictureParams(true)
-                }
-                result.success(null)
+                    // Fix: Cast to Map first
+                    val args = call.arguments as? Map<String, Any?>
+                    val autoEnterEnabled = getParameter(args, "autoEnterEnabled", false)
+                    if (autoEnterEnabled) {
+                        setPictureInPictureParams(true)
+                    }
             }
             SET_LOOPING_METHOD -> {
                 player.setLooping(call.argument(LOOPING_PARAMETER)!!)
@@ -206,8 +210,11 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                 result.success(null)
             }
             ENABLE_PICTURE_IN_PICTURE_METHOD -> {
-                val player = videoPlayers[getParameter(call.arguments, TEXTURE_ID_PARAMETER, -1L)]
-                val autoEnterEnabled = getParameter(call.arguments, "autoEnterEnabled", false)
+                // Fix: Cast to Map first
+                val args = call.arguments as? Map<String, Any?>
+                val textureId = getParameter(args, TEXTURE_ID_PARAMETER, -1L)
+                val player = videoPlayers[textureId]
+                val autoEnterEnabled = getParameter(args, "autoEnterEnabled", false)
                 if (player != null) {
                     enablePictureInPicture(player, autoEnterEnabled)
                 }
