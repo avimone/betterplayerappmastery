@@ -9,6 +9,24 @@
 #error Code Requires ARC.
 #endif
 
+// ✅ NEW: forward-declare new YouTube-aware method WITHOUT changing BetterPlayer.h
+@interface BetterPlayer (YouTubeDataSource)
+- (void)setDataSourceURL:(NSURL*)url
+                 withKey:(NSString*)key
+      withCertificateUrl:(NSString*)certificateUrl
+          withLicenseUrl:(NSString*)licenseUrl
+             withHeaders:(NSDictionary*)headers
+               withCache:(BOOL)useCache
+                cacheKey:(NSString*)cacheKey
+            cacheManager:(CacheManager*)cacheManager
+     overriddenDuration:(int)overriddenDuration
+        videoExtension:(NSString*)videoExtension
+              isYouTube:(BOOL)isYouTube
+         youTubeAudioUrl:(NSString*)youTubeAudioUrl
+  youTubeFallbackMuxedUrl:(NSString*)youTubeFallbackMuxedUrl
+           youTubeIsHls:(BOOL)youTubeIsHls
+          youTubeIsMuxed:(BOOL)youTubeIsMuxed;
+@end
 
 @implementation BetterPlayerPlugin
 NSMutableDictionary* _dataSourceDict;
@@ -159,8 +177,6 @@ bool _remoteCommandsInitialized = false;
         return MPRemoteCommandHandlerStatusSuccess;
     }];
 
-
-
     if (@available(iOS 9.1, *)) {
         [commandCenter.changePlaybackPositionCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent * _Nonnull event) {
             if (_notificationPlayer != [NSNull null]){
@@ -179,7 +195,6 @@ bool _remoteCommandsInitialized = false;
 - (void) setupRemoteCommandNotification:(BetterPlayer*)player, NSString* title, NSString* author , NSString* imageUrl{
     float positionInSeconds = player.position /1000;
     float durationInSeconds = player.duration/ 1000;
-
 
     NSMutableDictionary * nowPlayingInfoDict = [@{MPMediaItemPropertyArtist: author,
                                                   MPMediaItemPropertyTitle: title,
@@ -227,8 +242,6 @@ bool _remoteCommandsInitialized = false;
     }
 }
 
-
-
 - (NSString*) getTextureId: (BetterPlayer*) player{
     NSArray* temp = [_players allKeysForObject: player];
     NSString* key = [temp lastObject];
@@ -243,7 +256,6 @@ bool _remoteCommandsInitialized = false;
     NSString* key =  [self getTextureId:player];
     [ _timeObserverIdDict setObject:_timeObserverId forKey: key];
 }
-
 
 - (void) disposeNotificationData: (BetterPlayer*)player{
     if (player == _notificationPlayer){
@@ -273,12 +285,9 @@ bool _remoteCommandsInitialized = false;
         [playerToRemoveListener.player removeTimeObserver: timeObserverId];
     }
     [_timeObserverIdDict removeAllObjects];
-
 }
 
-
 - (void)handleMethodCall:(FlutterMethodCall*)call result:(FlutterResult)result {
-
 
     if ([@"init" isEqualToString:call.method]) {
         // Allow audio playback when the Ring/Silent switch is set to silent
@@ -310,7 +319,7 @@ bool _remoteCommandsInitialized = false;
             NSString* cacheKey = dataSource[@"cacheKey"];
             NSNumber* maxCacheSize = dataSource[@"maxCacheSize"];
             NSString* videoExtension = dataSource[@"videoExtension"];
-            
+
             int overriddenDuration = 0;
             if ([dataSource objectForKey:@"overriddenDuration"] != [NSNull null]){
                 overriddenDuration = [dataSource[@"overriddenDuration"] intValue];
@@ -339,7 +348,54 @@ bool _remoteCommandsInitialized = false;
                 }
                 [player setDataSourceAsset:assetPath withKey:key withCertificateUrl:certificateUrl withLicenseUrl: licenseUrl cacheKey:cacheKey cacheManager:_cacheManager overriddenDuration:overriddenDuration];
             } else if (uriArg) {
-                [player setDataSourceURL:[NSURL URLWithString:uriArg] withKey:key withCertificateUrl:certificateUrl withLicenseUrl: licenseUrl withHeaders:headers withCache: useCache cacheKey:cacheKey cacheManager:_cacheManager overriddenDuration:overriddenDuration videoExtension: videoExtension];
+
+                // ✅ NEW: YouTube flags (ONLY affect playback when isYouTube == true)
+                BOOL isYouTube = NO;
+                id isYouTubeObj = dataSource[@"isYouTube"];
+                if (isYouTubeObj != [NSNull null] && isYouTubeObj != nil) {
+                    isYouTube = [isYouTubeObj boolValue];
+                }
+
+                if (isYouTube) {
+                    NSString* youTubeAudioUrl = dataSource[@"youTubeAudioUrl"];
+                    if (youTubeAudioUrl == (id)[NSNull null]) { youTubeAudioUrl = nil; }
+
+                    NSString* youTubeFallbackMuxedUrl = dataSource[@"youTubeFallbackMuxedUrl"];
+                    if (youTubeFallbackMuxedUrl == (id)[NSNull null]) { youTubeFallbackMuxedUrl = nil; }
+
+                    BOOL youTubeIsHls = NO;
+                    id youTubeIsHlsObj = dataSource[@"youTubeIsHls"];
+                    if (youTubeIsHlsObj != [NSNull null] && youTubeIsHlsObj != nil) {
+                        youTubeIsHls = [youTubeIsHlsObj boolValue];
+                    }
+
+                    BOOL youTubeIsMuxed = NO;
+                    id youTubeIsMuxedObj = dataSource[@"youTubeIsMuxed"];
+                    if (youTubeIsMuxedObj != [NSNull null] && youTubeIsMuxedObj != nil) {
+                        youTubeIsMuxed = [youTubeIsMuxedObj boolValue];
+                    }
+
+                    [player setDataSourceURL:[NSURL URLWithString:uriArg]
+                                     withKey:key
+                          withCertificateUrl:certificateUrl
+                              withLicenseUrl:licenseUrl
+                                 withHeaders:headers
+                                   withCache:useCache
+                                    cacheKey:cacheKey
+                                cacheManager:_cacheManager
+                         overriddenDuration:overriddenDuration
+                            videoExtension:videoExtension
+                                  isYouTube:YES
+                             youTubeAudioUrl:youTubeAudioUrl
+                      youTubeFallbackMuxedUrl:youTubeFallbackMuxedUrl
+                               youTubeIsHls:youTubeIsHls
+                              youTubeIsMuxed:youTubeIsMuxed];
+
+                } else {
+                    // ✅ OLD behavior UNCHANGED
+                    [player setDataSourceURL:[NSURL URLWithString:uriArg] withKey:key withCertificateUrl:certificateUrl withLicenseUrl: licenseUrl withHeaders:headers withCache: useCache cacheKey:cacheKey cacheManager:_cacheManager overriddenDuration:overriddenDuration videoExtension: videoExtension];
+                }
+
             } else {
                 result(FlutterMethodNotImplemented);
             }
@@ -429,14 +485,14 @@ bool _remoteCommandsInitialized = false;
             NSDictionary* headers = dataSource[@"headers"];
             NSNumber* maxCacheSize = dataSource[@"maxCacheSize"];
             NSString* videoExtension = dataSource[@"videoExtension"];
-            
+
             if (headers == [ NSNull null ]){
                 headers = @{};
             }
             if (videoExtension == [NSNull null]){
                 videoExtension = nil;
             }
-            
+
             if (urlArg != [NSNull null]){
                 NSURL* url = [NSURL URLWithString:urlArg];
                 if ([_cacheManager isPreCacheSupportedWithUrl:url videoExtension:videoExtension]){

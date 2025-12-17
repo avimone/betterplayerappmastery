@@ -12,7 +12,6 @@ static void* playbackBufferEmptyContext = &playbackBufferEmptyContext;
 static void* playbackBufferFullContext = &playbackBufferFullContext;
 static void* presentationSizeContext = &presentationSizeContext;
 
-
 #if TARGET_OS_IOS
 void (^__strong _Nonnull _restoreUserInterfaceForPIPStopCompletionHandler)(BOOL);
 API_AVAILABLE(ios(9.0))
@@ -20,6 +19,138 @@ AVPictureInPictureController *_pipController;
 #endif
 
 @implementation BetterPlayer
+
+#pragma mark - ✅ NEW: Helper methods for YouTube merge (NO effect unless isYouTube == true)
+
+- (AVURLAsset*)_bpUrlAssetWithURL:(NSURL*)url headers:(NSDictionary*)headers {
+    if (headers == nil || headers == (id)[NSNull null]) {
+        headers = @{};
+    }
+    return [AVURLAsset URLAssetWithURL:url options:@{@"AVURLAssetHTTPHeaderFieldsKey": headers}];
+}
+
+- (void)_bpBuildMergedItemWithVideoURL:(NSURL*)videoURL
+                              audioURL:(NSURL*)audioURL
+                               headers:(NSDictionary*)headers
+                            completion:(void (^)(AVPlayerItem* item, NSError* error))completion {
+
+    AVURLAsset* videoAsset = [self _bpUrlAssetWithURL:videoURL headers:headers];
+    AVURLAsset* audioAsset = [self _bpUrlAssetWithURL:audioURL headers:headers];
+
+    dispatch_group_t group = dispatch_group_create();
+    __block NSError* vErr = nil;
+    __block NSError* aErr = nil;
+
+    dispatch_group_enter(group);
+    [videoAsset loadValuesAsynchronouslyForKeys:@[@"tracks", @"duration"] completionHandler:^{
+        NSError* err = nil;
+        AVKeyValueStatus s1 = [videoAsset statusOfValueForKey:@"tracks" error:&err];
+        if (s1 != AVKeyValueStatusLoaded) {
+            vErr = err ?: [NSError errorWithDomain:@"BetterPlayer" code:-100 userInfo:@{NSLocalizedDescriptionKey:@"Video tracks not loaded"}];
+        }
+        dispatch_group_leave(group);
+    }];
+
+    dispatch_group_enter(group);
+    [audioAsset loadValuesAsynchronouslyForKeys:@[@"tracks", @"duration"] completionHandler:^{
+        NSError* err = nil;
+        AVKeyValueStatus s1 = [audioAsset statusOfValueForKey:@"tracks" error:&err];
+        if (s1 != AVKeyValueStatusLoaded) {
+            aErr = err ?: [NSError errorWithDomain:@"BetterPlayer" code:-101 userInfo:@{NSLocalizedDescriptionKey:@"Audio tracks not loaded"}];
+        }
+        dispatch_group_leave(group);
+    }];
+
+    dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+        if (self->_disposed) return;
+
+        NSError* err = vErr ?: aErr;
+        if (err) {
+            completion(nil, err);
+            return;
+        }
+
+        AVAssetTrack* vTrack = [[videoAsset tracksWithMediaType:AVMediaTypeVideo] firstObject];
+        AVAssetTrack* aTrack = [[audioAsset tracksWithMediaType:AVMediaTypeAudio] firstObject];
+
+        if (!vTrack || !aTrack) {
+            completion(nil, [NSError errorWithDomain:@"BetterPlayer" code:-102 userInfo:@{NSLocalizedDescriptionKey:@"Missing video or audio track"}]);
+            return;
+        }
+
+        AVMutableComposition* mix = [AVMutableComposition composition];
+
+        CMTime duration = videoAsset.duration;
+        if (CMTIME_IS_INVALID(duration) || CMTIME_IS_INDEFINITE(duration)) {
+            duration = audioAsset.duration;
+        }
+        if (CMTIME_IS_INVALID(duration) || CMTIME_IS_INDEFINITE(duration) || CMTIME_COMPARE_INLINE(duration, ==, kCMTimeZero)) {
+            duration = videoAsset.duration;
+        }
+
+        CMTimeRange fullRange = CMTimeRangeMake(kCMTimeZero, duration);
+
+        // Video
+        AVMutableCompositionTrack* compVideo =
+        [mix addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
+
+        NSError* insErr = nil;
+        [compVideo insertTimeRange:fullRange ofTrack:vTrack atTime:kCMTimeZero error:&insErr];
+        if (insErr) {
+            completion(nil, insErr);
+            return;
+        }
+        compVideo.preferredTransform = vTrack.preferredTransform;
+
+        // Audio (m4a)
+        AVMutableCompositionTrack* compAudio =
+        [mix addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+
+        insErr = nil;
+        [compAudio insertTimeRange:fullRange ofTrack:aTrack atTime:kCMTimeZero error:&insErr];
+        if (insErr) {
+            completion(nil, insErr);
+            return;
+        }
+
+        AVPlayerItem* mergedItem = [AVPlayerItem playerItemWithAsset:mix];
+        completion(mergedItem, nil);
+    });
+}
+
+- (void)_bpReplaceCurrentItemPreservingState:(AVPlayerItem*)item seekTo:(CMTime)time {
+    BOOL wasPlaying = _isPlaying;
+    double rate = _playerRate;
+
+    // Remove old observers safely
+    [self removeObservers];
+
+    [_player replaceCurrentItemWithPlayerItem:item];
+
+    // Add observers for the new item
+    [self addObservers:item];
+
+    __weak BetterPlayer* weakSelf = self;
+    [_player seekToTime:time toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero completionHandler:^(BOOL finished) {
+        BetterPlayer* strongSelf = weakSelf;
+        if (!strongSelf || strongSelf->_disposed) return;
+
+        if (wasPlaying) {
+            if (@available(iOS 10.0, *)) {
+                [strongSelf->_player playImmediatelyAtRate:1.0];
+                strongSelf->_player.rate = rate;
+            } else {
+                [strongSelf->_player play];
+                strongSelf->_player.rate = rate;
+            }
+        } else {
+            [strongSelf->_player pause];
+        }
+    }];
+}
+
+#pragma mark - Existing init/view/etc.
+
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super init];
     NSAssert(self, @"super init cannot be nil");
@@ -122,7 +253,6 @@ AVPictureInPictureController *_pipController;
     }
 }
 
-
 static inline CGFloat radiansToDegrees(CGFloat radians) {
     // Input range [-pi, pi] or [-180, 180]
     CGFloat degrees = GLKMathRadiansToDegrees((float)radians);
@@ -166,16 +296,12 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
         fps = (int) ceil(nominalFrameRate);
     }
     videoComposition.frameDuration = CMTimeMake(1, fps);
-    
+
     return videoComposition;
 }
 
 - (CGAffineTransform)fixTransform:(AVAssetTrack*)videoTrack {
   CGAffineTransform transform = videoTrack.preferredTransform;
-  // TODO(@recastrodiaz): why do we need to do this? Why is the preferredTransform incorrect?
-  // At least 2 user videos show a black screen when in portrait mode if we directly use the
-  // videoTrack.preferredTransform Setting tx to the height of the video instead of 0, properly
-  // displays the video https://github.com/flutter/flutter/issues/17606#issuecomment-413473181
   NSInteger rotationDegrees = (NSInteger)round(radiansToDegrees(atan2(transform.b, transform.a)));
   if (rotationDegrees == 90) {
     transform.tx = videoTrack.naturalSize.height;
@@ -195,39 +321,187 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     return [self setDataSourceURL:[NSURL fileURLWithPath:path] withKey:key withCertificateUrl:certificateUrl withLicenseUrl:(NSString*)licenseUrl withHeaders: @{} withCache: false cacheKey:cacheKey cacheManager:cacheManager overriddenDuration:overriddenDuration videoExtension: nil];
 }
 
-- (void)setDataSourceURL:(NSURL*)url withKey:(NSString*)key withCertificateUrl:(NSString*)certificateUrl withLicenseUrl:(NSString*)licenseUrl withHeaders:(NSDictionary*)headers withCache:(BOOL)useCache cacheKey:(NSString*)cacheKey cacheManager:(CacheManager*)cacheManager overriddenDuration:(int) overriddenDuration videoExtension: (NSString*) videoExtension{
+#pragma mark - ✅ Existing method remains, now forwards to new method with isYouTube:NO
+
+- (void)setDataSourceURL:(NSURL*)url
+                 withKey:(NSString*)key
+      withCertificateUrl:(NSString*)certificateUrl
+          withLicenseUrl:(NSString*)licenseUrl
+             withHeaders:(NSDictionary*)headers
+               withCache:(BOOL)useCache
+                cacheKey:(NSString*)cacheKey
+            cacheManager:(CacheManager*)cacheManager
+     overriddenDuration:(int)overriddenDuration
+        videoExtension:(NSString*)videoExtension {
+
+    // ✅ Normal playback stays EXACTLY the same (YouTube disabled)
+    [self setDataSourceURL:url
+                   withKey:key
+        withCertificateUrl:certificateUrl
+            withLicenseUrl:licenseUrl
+               withHeaders:headers
+                 withCache:useCache
+                  cacheKey:cacheKey
+              cacheManager:cacheManager
+       overriddenDuration:overriddenDuration
+          videoExtension:videoExtension
+                 isYouTube:NO
+            youTubeAudioUrl:nil
+     youTubeFallbackMuxedUrl:nil
+              youTubeIsHls:NO
+             youTubeIsMuxed:NO];
+}
+
+#pragma mark - ✅ NEW: YouTube-aware setDataSourceURL (ONLY changes behavior when isYouTube == true)
+
+- (void)setDataSourceURL:(NSURL*)url
+                 withKey:(NSString*)key
+      withCertificateUrl:(NSString*)certificateUrl
+          withLicenseUrl:(NSString*)licenseUrl
+             withHeaders:(NSDictionary*)headers
+               withCache:(BOOL)useCache
+                cacheKey:(NSString*)cacheKey
+            cacheManager:(CacheManager*)cacheManager
+     overriddenDuration:(int)overriddenDuration
+        videoExtension:(NSString*)videoExtension
+              isYouTube:(BOOL)isYouTube
+         youTubeAudioUrl:(NSString*)youTubeAudioUrl
+  youTubeFallbackMuxedUrl:(NSString*)youTubeFallbackMuxedUrl
+           youTubeIsHls:(BOOL)youTubeIsHls
+          youTubeIsMuxed:(BOOL)youTubeIsMuxed {
+
     _overriddenDuration = 0;
     if (headers == [NSNull null] || headers == NULL){
         headers = @{};
     }
-    
-    AVPlayerItem* item;
-    if (useCache){
-        if (cacheKey == [NSNull null]){
-            cacheKey = nil;
+
+    // ✅ If NOT YouTube, run EXACT old logic (NO change)
+    if (!isYouTube) {
+        AVPlayerItem* item;
+        if (useCache){
+            if (cacheKey == [NSNull null]){
+                cacheKey = nil;
+            }
+            if (videoExtension == [NSNull null]){
+                videoExtension = nil;
+            }
+
+            item = [cacheManager getCachingPlayerItemForNormalPlayback:url cacheKey:cacheKey videoExtension: videoExtension headers:headers];
+        } else {
+            AVURLAsset* asset = [AVURLAsset URLAssetWithURL:url
+                                                    options:@{@"AVURLAssetHTTPHeaderFieldsKey" : headers}];
+            if (certificateUrl && certificateUrl != [NSNull null] && [certificateUrl length] > 0) {
+                NSURL * certificateNSURL = [[NSURL alloc] initWithString: certificateUrl];
+                NSURL * licenseNSURL = [[NSURL alloc] initWithString: licenseUrl];
+                _loaderDelegate = [[BetterPlayerEzDrmAssetsLoaderDelegate alloc] init:certificateNSURL withLicenseURL:licenseNSURL];
+                dispatch_queue_attr_t qos = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_DEFAULT, -1);
+                dispatch_queue_t streamQueue = dispatch_queue_create("streamQueue", qos);
+                [asset.resourceLoader setDelegate:_loaderDelegate queue:streamQueue];
+            }
+            item = [AVPlayerItem playerItemWithAsset:asset];
         }
-        if (videoExtension == [NSNull null]){
-            videoExtension = nil;
+
+        if (@available(iOS 10.0, *) && overriddenDuration > 0) {
+            _overriddenDuration = overriddenDuration;
         }
-        
-        item = [cacheManager getCachingPlayerItemForNormalPlayback:url cacheKey:cacheKey videoExtension: videoExtension headers:headers];
-    } else {
-        AVURLAsset* asset = [AVURLAsset URLAssetWithURL:url
-                                                options:@{@"AVURLAssetHTTPHeaderFieldsKey" : headers}];
-        if (certificateUrl && certificateUrl != [NSNull null] && [certificateUrl length] > 0) {
-            NSURL * certificateNSURL = [[NSURL alloc] initWithString: certificateUrl];
-            NSURL * licenseNSURL = [[NSURL alloc] initWithString: licenseUrl];
-            _loaderDelegate = [[BetterPlayerEzDrmAssetsLoaderDelegate alloc] init:certificateNSURL withLicenseURL:licenseNSURL];
-            dispatch_queue_attr_t qos = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_DEFAULT, -1);
-            dispatch_queue_t streamQueue = dispatch_queue_create("streamQueue", qos);
-            [asset.resourceLoader setDelegate:_loaderDelegate queue:streamQueue];
-        }
-        item = [AVPlayerItem playerItemWithAsset:asset];
+        return [self setDataSourcePlayerItem:item withKey:key];
     }
 
-    if (@available(iOS 10.0, *) && overriddenDuration > 0) {
-        _overriddenDuration = overriddenDuration;
+    // -------------------- ✅ YouTube path starts here --------------------
+    BOOL hasAudio = (youTubeAudioUrl != nil && youTubeAudioUrl != (id)[NSNull null] && youTubeAudioUrl.length > 0);
+    BOOL hasFallback = (youTubeFallbackMuxedUrl != nil && youTubeFallbackMuxedUrl != (id)[NSNull null] && youTubeFallbackMuxedUrl.length > 0);
+
+    // 1) HLS -> direct
+    if (youTubeIsHls) {
+        AVURLAsset* asset = [self _bpUrlAssetWithURL:url headers:headers];
+        AVPlayerItem* item = [AVPlayerItem playerItemWithAsset:asset];
+        if (@available(iOS 10.0, *) && overriddenDuration > 0) _overriddenDuration = overriddenDuration;
+        return [self setDataSourcePlayerItem:item withKey:key];
     }
+
+    // 2) Muxed -> direct
+    if (youTubeIsMuxed) {
+        AVURLAsset* asset = [self _bpUrlAssetWithURL:url headers:headers];
+        AVPlayerItem* item = [AVPlayerItem playerItemWithAsset:asset];
+        if (@available(iOS 10.0, *) && overriddenDuration > 0) _overriddenDuration = overriddenDuration;
+        return [self setDataSourcePlayerItem:item withKey:key];
+    }
+
+    // 3) Separate A/V + fallback -> start fallback immediately then merge and switch
+    if (hasAudio && hasFallback) {
+        NSURL* fallbackURL = [NSURL URLWithString:youTubeFallbackMuxedUrl];
+        AVURLAsset* fallbackAsset = [self _bpUrlAssetWithURL:fallbackURL headers:headers];
+        AVPlayerItem* fallbackItem = [AVPlayerItem playerItemWithAsset:fallbackAsset];
+
+        if (@available(iOS 10.0, *) && overriddenDuration > 0) {
+            _overriddenDuration = overriddenDuration;
+        }
+
+        // Start fallback now
+        [self setDataSourcePlayerItem:fallbackItem withKey:key];
+
+        // Build merged (video + m4a audio) and then switch at same position
+        NSURL* audioURL = [NSURL URLWithString:youTubeAudioUrl];
+        __weak BetterPlayer* weakSelf = self;
+        [self _bpBuildMergedItemWithVideoURL:url audioURL:audioURL headers:headers completion:^(AVPlayerItem *item, NSError *error) {
+            BetterPlayer* strongSelf = weakSelf;
+            if (!strongSelf || strongSelf->_disposed) return;
+
+            if (error || !item) {
+                // Stay on fallback (do not break existing playback)
+                return;
+            }
+
+            CMTime current = strongSelf->_player.currentTime;
+            [strongSelf _bpReplaceCurrentItemPreservingState:item seekTo:current];
+
+            if (strongSelf->_eventSink) {
+                strongSelf->_eventSink(@{@"event" : @"youtubeHdReady", @"key" : strongSelf->_key ?: @""});
+            }
+        }];
+
+        return;
+    }
+
+    // 4) Separate A/V without fallback -> merge directly
+    if (hasAudio) {
+        NSURL* audioURL = [NSURL URLWithString:youTubeAudioUrl];
+        __weak BetterPlayer* weakSelf = self;
+        [self _bpBuildMergedItemWithVideoURL:url audioURL:audioURL headers:headers completion:^(AVPlayerItem *item, NSError *error) {
+            BetterPlayer* strongSelf = weakSelf;
+            if (!strongSelf || strongSelf->_disposed) return;
+
+            if (error || !item) {
+                if (strongSelf->_eventSink != nil) {
+                    strongSelf->_eventSink([FlutterError errorWithCode:@"VideoError"
+                                                             message:[@"Failed to load YouTube merged A/V: "
+                                                                      stringByAppendingString:(error.localizedDescription ?: @"unknown")]
+                                                             details:nil]);
+                }
+                return;
+            }
+
+            if (@available(iOS 10.0, *) && overriddenDuration > 0) {
+                strongSelf->_overriddenDuration = overriddenDuration;
+            }
+            [strongSelf setDataSourcePlayerItem:item withKey:key];
+        }];
+        return;
+    }
+
+    // 5) Fallback only
+    if (hasFallback) {
+        NSURL* fallbackURL = [NSURL URLWithString:youTubeFallbackMuxedUrl];
+        AVURLAsset* asset = [self _bpUrlAssetWithURL:fallbackURL headers:headers];
+        AVPlayerItem* item = [AVPlayerItem playerItemWithAsset:asset];
+        if (@available(iOS 10.0, *) && overriddenDuration > 0) _overriddenDuration = overriddenDuration;
+        return [self setDataSourcePlayerItem:item withKey:key];
+    }
+
+    // Default YouTube: play main URL directly
+    AVURLAsset* asset = [self _bpUrlAssetWithURL:url headers:headers];
+    AVPlayerItem* item = [AVPlayerItem playerItemWithAsset:asset];
+    if (@available(iOS 10.0, *) && overriddenDuration > 0) _overriddenDuration = overriddenDuration;
     return [self setDataSourcePlayerItem:item withKey:key];
 }
 
@@ -248,12 +522,7 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
                     if (self->_disposed) return;
                     if ([videoTrack statusOfValueForKey:@"preferredTransform"
                                                   error:nil] == AVKeyValueStatusLoaded) {
-                        // Rotate the video by using a videoComposition and the preferredTransform
                         self->_preferredTransform = [self fixTransform:videoTrack];
-                        // Note:
-                        // https://developer.apple.com/documentation/avfoundation/avplayeritem/1388818-videocomposition
-                        // Video composition can only be used with file-based media and is not supported for
-                        // use with media served using HTTP Live Streaming.
                         AVMutableVideoComposition* videoComposition =
                         [self getVideoCompositionWithTransform:self->_preferredTransform
                                                      withAsset:asset
@@ -295,7 +564,6 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
             return;
         }
         [self performSelector:@selector(startStalledCheck) withObject:nil afterDelay:1];
-
     }
 }
 
@@ -311,7 +579,6 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     } else {
         return 0;
     }
-
 }
 
 - (void)observeValueForKeyPath:(NSString*)path
@@ -343,10 +610,10 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
             }
         }
 
-        if (_player.rate == 0 && //if player rate dropped to 0
-            CMTIME_COMPARE_INLINE(_player.currentItem.currentTime, >, kCMTimeZero) && //if video was started
-            CMTIME_COMPARE_INLINE(_player.currentItem.currentTime, <, _player.currentItem.duration) && //but not yet finished
-            _isPlaying) { //instance variable to handle overall state (changed to YES when user triggers playback)
+        if (_player.rate == 0 &&
+            CMTIME_COMPARE_INLINE(_player.currentItem.currentTime, >, kCMTimeZero) &&
+            CMTIME_COMPARE_INLINE(_player.currentItem.currentTime, <, _player.currentItem.duration) &&
+            _isPlaying) {
             [self handleStalled];
         }
     }
@@ -447,21 +714,17 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
         CGFloat width = size.width;
         CGFloat height = size.height;
 
-
         AVAsset *asset = _player.currentItem.asset;
         bool onlyAudio =  [[asset tracksWithMediaType:AVMediaTypeVideo] count] == 0;
 
-        // The player has not yet initialized.
         if (!onlyAudio && height == CGSizeZero.height && width == CGSizeZero.width) {
             return;
         }
         const BOOL isLive = CMTIME_IS_INDEFINITE([_player currentItem].duration);
-        // The player may be initialized but still needs to determine the duration.
         if (isLive == false && [self duration] == 0) {
             return;
         }
 
-        //Fix from https://github.com/flutter/flutter/issues/66413
         AVPlayerItemTrack *track = [self.player currentItem].tracks.firstObject;
         CGSize naturalSize = track.assetTrack.naturalSize;
         CGAffineTransform prefTrans = track.assetTrack.preferredTransform;
@@ -519,7 +782,6 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)seekTo:(int)location {
-    ///When player is playing, pause video, seek to new position and start again. This will prevent issues with seekbar jumps.
     bool wasPlaying = _isPlaying;
     if (wasPlaying){
         [_player pause];
@@ -572,7 +834,6 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     }
 }
 
-
 - (void)setTrackParameters:(int) width: (int) height: (int)bitrate {
     _player.currentItem.preferredPeakBitRate = bitrate;
     if (@available(iOS 11.0, *)) {
@@ -615,21 +876,19 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
         @try {
             [[AVAudioSession sharedInstance] setActive: YES error: nil];
             [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
-            
-            if (!_pipController && self._playerLayer && 
+
+            if (!_pipController && self._playerLayer &&
                 [AVPictureInPictureController isPictureInPictureSupported]) {
-                _pipController = [[AVPictureInPictureController alloc] 
+                _pipController = [[AVPictureInPictureController alloc]
                                  initWithPlayerLayer:self._playerLayer];
                 _pipController.delegate = self;
-                
-                // Enable automatic PiP for supported devices (iOS 14.2+)
+
                 if (@available(iOS 14.2, *)) {
                     _pipController.canStartPictureInPictureAutomaticallyFromInline = YES;
                 }
-                
-                // Enable requires linear playback (iOS 14.0+) for better HLS support
+
                 if (@available(iOS 14.0, *)) {
-                    _pipController.requiresLinearPlayback = NO; // Allow seeking in PiP
+                    _pipController.requiresLinearPlayback = NO;
                 }
             }
         } @catch (NSException *exception) {
@@ -641,13 +900,10 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 - (void) enablePictureInPicture: (CGRect) frame {
     @try {
         [self disablePictureInPicture];
-        
-        // NEW: Get reference to the original BetterPlayerView
+
         BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
-        
-        // NEW: Hide the original player layer to prevent dual playback
         originalPlayerView.playerLayer.hidden = YES;
-        
+
         if (@available(iOS 9.0, *)) {
             [self usePlayerLayer:frame];
         }
@@ -662,27 +918,24 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 - (void)usePlayerLayer: (CGRect) frame {
     if (_player) {
         @try {
-            // Keep your exact existing code
             self._playerLayer = [AVPlayerLayer playerLayerWithPlayer:_player];
             UIViewController* vc = [[[UIApplication sharedApplication] keyWindow] rootViewController];
-            
+
             CGRect adjustedFrame = [self adjustFrameForCurrentOrientation:frame];
             self._playerLayer.frame = adjustedFrame;
             self._playerLayer.needsDisplayOnBoundsChange = YES;
             self._playerLayer.videoGravity = AVLayerVideoGravityResizeAspect;
-            
+
             [vc.view.layer addSublayer:self._playerLayer];
             vc.view.layer.needsDisplayOnBoundsChange = YES;
-            
-            // 🚀 ONLY CHANGE: Make the background layer transparent
-            self._playerLayer.opacity = 0.0; // Make it invisible
-            
-            // Keep everything else exactly the same
+
+            self._playerLayer.opacity = 0.0;
+
             if (@available(iOS 9.0, *)) {
                 _pipController = NULL;
             }
             [self setupPipController];
-            
+
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
                            dispatch_get_main_queue(), ^{
                 [self setPictureInPicture:true];
@@ -694,24 +947,21 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (CGRect)adjustFrameForCurrentOrientation:(CGRect)originalFrame {
-    // Handle orientation changes and different device types (iPhone/iPad)
     UIViewController* vc = [[[UIApplication sharedApplication] keyWindow] rootViewController];
     CGRect bounds = vc.view.bounds;
-    
-    // For fullscreen or landscape mode, use the full bounds
-    if (originalFrame.size.width >= bounds.size.width * 0.8 || 
+
+    if (originalFrame.size.width >= bounds.size.width * 0.8 ||
         originalFrame.size.height >= bounds.size.height * 0.8) {
         return bounds;
     }
-    
-    // For normal mode, use the provided frame
+
     return originalFrame;
 }
 
 - (void)disablePictureInPicture
 {
-    [self setPictureInPicture:false]; // Changed from true to NO
-    if (self._playerLayer){ // Changed from __playerLayer to self._playerLayer
+    [self setPictureInPicture:false];
+    if (self._playerLayer){
         [self._playerLayer removeFromSuperlayer];
         self._playerLayer = nil;
         if (_eventSink != nil) {
@@ -724,22 +974,18 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
 #if TARGET_OS_IOS
 - (void)pictureInPictureControllerDidStopPictureInPicture:(AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(ios(9.0)) {
-    // Show original player view when PiP stops
     BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
     originalPlayerView.playerLayer.hidden = NO;
-    
+
     [self disablePictureInPicture];
 }
 
-// Enhanced delegate methods with better error handling
 - (void)pictureInPictureControllerDidStartPictureInPicture:(AVPictureInPictureController *)pictureInPictureController API_AVAILABLE(ios(9.0)) {
-    // Hide original player
     BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
     originalPlayerView.playerLayer.hidden = YES;
-    
-    // Move app to background immediately
+
     [[UIApplication sharedApplication] performSelector:@selector(suspend)];
-    
+
     if (_eventSink != nil) {
         _eventSink(@{@"event" : @"pipStart"});
     }
@@ -753,7 +999,7 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
 }
 
-- (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController 
+- (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController
            failedToStartPictureInPictureWithError:(NSError *)error API_AVAILABLE(ios(9.0)) {
     NSLog(@"PiP failed to start: %@", error.localizedDescription);
     if (_eventSink != nil) {
@@ -761,12 +1007,11 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     }
 }
 
-- (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController 
+- (void)pictureInPictureController:(AVPictureInPictureController *)pictureInPictureController
 restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:(void (^)(BOOL))completionHandler API_AVAILABLE(ios(9.0)) {
-    // NEW: Ensure proper restoration
     BetterPlayerView* originalPlayerView = (BetterPlayerView*)self.view;
     originalPlayerView.playerLayer.hidden = NO;
-    
+
     [self setRestoreUserInterfaceForPIPStopCompletionHandler:YES];
     if (completionHandler) {
         completionHandler(YES);
@@ -777,7 +1022,6 @@ restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:(void (^)(BOOL)
     AVMediaSelectionGroup *audioSelectionGroup = [[[_player currentItem] asset] mediaSelectionGroupForMediaCharacteristic: AVMediaCharacteristicAudible];
     NSArray* options = audioSelectionGroup.options;
 
-
     for (int audioTrackIndex = 0; audioTrackIndex < [options count]; audioTrackIndex++) {
         AVMediaSelectionOption* option = [options objectAtIndex:audioTrackIndex];
         NSArray *metaDatas = [AVMetadataItem metadataItemsFromArray:option.commonMetadata withKey:@"title" keySpace:@"comn"];
@@ -787,9 +1031,7 @@ restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:(void (^)(BOOL)
                 [[_player currentItem] selectMediaOption:option inMediaSelectionGroup: audioSelectionGroup];
             }
         }
-
     }
-
 }
 
 - (void)setMixWithOthers:(bool)mixWithOthers {
@@ -801,8 +1043,6 @@ restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:(void (^)(BOOL)
     [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback error:nil];
   }
 }
-
-
 #endif
 
 - (FlutterError* _Nullable)onCancelWithArguments:(id _Nullable)arguments {
@@ -813,18 +1053,10 @@ restoreUserInterfaceForPictureInPictureStopWithCompletionHandler:(void (^)(BOOL)
 - (FlutterError* _Nullable)onListenWithArguments:(id _Nullable)arguments
                                        eventSink:(nonnull FlutterEventSink)events {
     _eventSink = events;
-    // TODO(@recastrodiaz): remove the line below when the race condition is resolved:
-    // https://github.com/flutter/flutter/issues/21483
-    // This line ensures the 'initialized' event is sent when the event
-    // 'AVPlayerItemStatusReadyToPlay' fires before _eventSink is set (this function
-    // onListenWithArguments is called)
     [self onReadyToPlay];
     return nil;
 }
 
-/// This method allows you to dispose without touching the event channel.  This
-/// is useful for the case where the Engine is in the process of deconstruction
-/// so the channel is going to die or is already dead.
 - (void)disposeSansEventChannel {
     @try{
         [self clear];
