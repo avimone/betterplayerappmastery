@@ -106,8 +106,10 @@ internal class BetterPlayer(
     private var switchingToHd = false
     private var hdFailed = false
 
-    // Keep the HD merged source for switching later
-    private var pendingHdSource: MediaSource? = null
+    // IMPORTANT: DO NOT store MediaSource created for preload and reuse on exoPlayer
+    // Store URLs and rebuild source for the main player at switch time.
+    private var pendingHdVideoUrl: String? = null
+    private var pendingHdAudioUrl: String? = null
 
     init {
         val loadBuilder = DefaultLoadControl.Builder()
@@ -173,11 +175,27 @@ internal class BetterPlayer(
         return DefaultDataSource.Factory(context, httpDataSourceFactory)
     }
 
+    private fun buildMergedSource(
+        dataSourceFactory: DataSource.Factory,
+        videoOnlyUrl: String,
+        audioOnlyUrl: String
+    ): MediaSource {
+        val videoItem = MediaItem.fromUri(Uri.parse(videoOnlyUrl))
+        val audioItem = MediaItem.fromUri(Uri.parse(audioOnlyUrl))
+
+        val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+            .createMediaSource(videoItem)
+        val audioSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+            .createMediaSource(audioItem)
+
+        return MergingMediaSource(videoSource, audioSource)
+    }
+
     /**
-     * ✅ Flow you want:
+     * ✅ Desired flow:
      * 1) exoPlayer plays fallback muxed (itag=18) immediately (audio works)
      * 2) preloadPlayer prepares merged video+audio in background
-     * 3) when merged is READY, switch SAME exoPlayer to merged source at current position
+     * 3) when merged is READY, switch SAME exoPlayer to a *fresh* merged source at current position
      */
     private fun startFallbackAndPreloadHd(
         context: Context,
@@ -189,7 +207,9 @@ internal class BetterPlayer(
         hdReady = false
         hdFailed = false
         switchingToHd = false
-        pendingHdSource = null
+
+        pendingHdVideoUrl = videoOnlyUrl
+        pendingHdAudioUrl = audioOnlyUrl
 
         // --- 1) Immediate playback: fallback muxed on MAIN exoPlayer ---
         Log.d(TAG, "▶️ YouTube fast-start: playing fallback muxed NOW")
@@ -200,31 +220,19 @@ internal class BetterPlayer(
 
         exoPlayer?.setMediaSource(fallbackSource)
         exoPlayer?.prepare()
-        // Important: BetterPlayer might call play() later; but for YouTube fast start, we want auto-play here.
         exoPlayer?.playWhenReady = true
 
-        // --- 2) Build merged HD source (video-only + audio-only) ---
+        // --- 2) Preload merged HD (NEW MediaSource instance for preloadPlayer only) ---
         Log.d(TAG, "🔧 Preloading merged HD in background...")
 
-        val videoItem = MediaItem.fromUri(Uri.parse(videoOnlyUrl))
-        val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-            .createMediaSource(videoItem)
+        val preloadMerged = buildMergedSource(dataSourceFactory, videoOnlyUrl, audioOnlyUrl)
 
-        val audioItem = MediaItem.fromUri(Uri.parse(audioOnlyUrl))
-        val audioSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-            .createMediaSource(audioItem)
-
-        val mergedHdSource = MergingMediaSource(videoSource, audioSource)
-        pendingHdSource = mergedHdSource
-
-        // --- 3) Preload with a separate player (NO rendering, NO user control) ---
-        // This avoids stopping exoPlayer while still letting us detect "READY".
         preloadPlayer?.release()
         preloadPlayer = ExoPlayer.Builder(context)
             .setTrackSelector(DefaultTrackSelector(context))
             .build()
 
-        preloadPlayer?.setMediaSource(mergedHdSource)
+        preloadPlayer?.setMediaSource(preloadMerged)
         preloadPlayer?.prepare()
         preloadPlayer?.playWhenReady = false
 
@@ -242,18 +250,20 @@ internal class BetterPlayer(
             override fun onPlayerError(error: PlaybackException) {
                 hdFailed = true
                 Log.e(TAG, "❌ Preload HD failed; staying on fallback. ${error.message}")
-                // Keep fallback running; do nothing else.
             }
         })
     }
 
     /**
-     * Switch the SAME exoPlayer to the merged HD source.
-     * This is the critical fix vs your current code.
+     * Switch SAME exoPlayer to MERGED HD.
+     * Critical fix: create a NEW merged MediaSource instance for exoPlayer
+     * (never reuse the one used by preloadPlayer).
      */
     private fun switchMainPlayerToHd() {
         if (switchingToHd || !hdReady || hdFailed) return
-        val hdSource = pendingHdSource ?: return
+        val factory = currentDataSourceFactory ?: return
+        val vUrl = pendingHdVideoUrl ?: return
+        val aUrl = pendingHdAudioUrl ?: return
         if (exoPlayer == null) return
 
         switchingToHd = true
@@ -261,24 +271,23 @@ internal class BetterPlayer(
             val position = exoPlayer.currentPosition
             val wasPlaying = exoPlayer.playWhenReady
 
-            Log.d(TAG, "🔁 Switching MAIN exoPlayer to HD at position=$position")
+            Log.d(TAG, "🔁 Switching MAIN exoPlayer to merged HD at position=$position")
 
-            // Keep rendering surface on the SAME player (exoPlayer), so texture stays correct.
-            // Re-set audio attributes (safe)
-            setAudioAttributes(exoPlayer, true)
+            // Build fresh merged source for the main player
+            val mergedForMain = buildMergedSource(factory, vUrl, aUrl)
 
-            // Switch media source
-            exoPlayer.setMediaSource(hdSource, position)
+            // Keep audio attributes safe
+            setAudioAttributes(exoPlayer, mixWithOthers = false)
+
+            exoPlayer.setMediaSource(mergedForMain, position)
             exoPlayer.prepare()
             exoPlayer.playWhenReady = wasPlaying
 
-            // Release preloader now
             preloadPlayer?.release()
             preloadPlayer = null
 
             Log.d(TAG, "🎉 MAIN exoPlayer now playing merged HD")
 
-            // Notify Flutter
             val event: MutableMap<String, Any> = HashMap()
             event["event"] = "youtubeHdReady"
             eventSink.success(event)
@@ -293,7 +302,10 @@ internal class BetterPlayer(
     private fun disposeYouTubeResources() {
         preloadPlayer?.release()
         preloadPlayer = null
-        pendingHdSource = null
+
+        pendingHdVideoUrl = null
+        pendingHdAudioUrl = null
+
         hdReady = false
         hdFailed = false
         switchingToHd = false
@@ -334,7 +346,6 @@ internal class BetterPlayer(
         this.key = key
         isInitialized = false
 
-        // Store YouTube configuration
         this.isYouTubeStream = isYouTube
         this.youTubeAudioUrl = youTubeAudioUrl
         this.youTubeFallbackMuxedUrl = youTubeFallbackMuxedUrl
@@ -389,6 +400,7 @@ internal class BetterPlayer(
         } else {
             drmSessionManager = null
         }
+            Log.d(TAG, "=== Data Source ===")
 
         // ==================== YouTube stream handling ====================
         if (isYouTube) {
@@ -446,17 +458,8 @@ internal class BetterPlayer(
                 // Case 4: Separate A/V no fallback (just merge directly)
                 hasSeparateAudio -> {
                     Log.d(TAG, "🎬 YouTube merged A/V directly (no fallback)")
-
-                    val videoItem = MediaItem.fromUri(uri)
-                    val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                        .createMediaSource(videoItem)
-
-                    val audioItem = MediaItem.fromUri(Uri.parse(youTubeAudioUrl))
-                    val audioSource = ProgressiveMediaSource.Factory(dataSourceFactory)
-                        .createMediaSource(audioItem)
-
-                    val mergedSource = MergingMediaSource(videoSource, audioSource)
-                    exoPlayer?.setMediaSource(mergedSource)
+                    val merged = buildMergedSource(dataSourceFactory, dataSource ?: "", youTubeAudioUrl!!)
+                    exoPlayer?.setMediaSource(merged)
                     exoPlayer?.prepare()
                     exoPlayer?.playWhenReady = true
                 }
@@ -733,7 +736,8 @@ internal class BetterPlayer(
         surface = Surface(textureEntry.surfaceTexture())
         exoPlayer?.setVideoSurface(surface)
 
-        setAudioAttributes(exoPlayer, true)
+        // Request audio focus by default (mixWithOthers=false)
+        setAudioAttributes(exoPlayer, mixWithOthers = false)
 
         exoPlayer?.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -785,8 +789,11 @@ internal class BetterPlayer(
     private fun setAudioAttributes(exoPlayer: ExoPlayer?, mixWithOthers: Boolean) {
         val audioComponent = exoPlayer?.audioComponent ?: return
         audioComponent.setAudioAttributes(
-            AudioAttributes.Builder().setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
-            !mixWithOthers
+            AudioAttributes.Builder()
+                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                .setUsage(C.USAGE_MEDIA)
+                .build(),
+            !mixWithOthers // handleAudioFocus
         )
     }
 
@@ -969,7 +976,6 @@ internal class BetterPlayer(
         try {
             if (isInitialized) exoPlayer?.stop()
 
-            // YouTube background preloader cleanup
             disposeYouTubeResources()
 
             disposeMediaSession()
