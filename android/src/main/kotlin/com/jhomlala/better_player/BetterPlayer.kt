@@ -383,7 +383,7 @@ internal class BetterPlayer(
         this.youTubeIsMuxed = youTubeIsMuxed
         this.currentContext = context
         
-        val uri = Uri.parse(dataSource)
+        val uri = Uri.parse(dataSource ?: "")
         var dataSourceFactory: DataSource.Factory?
         val userAgent = getUserAgent(headers)
         
@@ -1228,7 +1228,7 @@ fun dispose() {
         private const val YT_ACCEPT =
             "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9";
         private const val YT_ACCEPT_LANGUAGE = "en-US,en;q=0.5";
-        
+
         //Clear cache without accessing BetterPlayerCache.
         fun clearCache(context: Context?, result: MethodChannel.Result) {
             try {
