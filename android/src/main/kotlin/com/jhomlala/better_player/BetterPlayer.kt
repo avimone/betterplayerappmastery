@@ -68,6 +68,7 @@ import java.lang.IllegalStateException
 import java.util.*
 import kotlin.math.max
 import kotlin.math.min
+import com.google.android.exoplayer2.source.MergingMediaSource;
 
 internal class BetterPlayer(
     context: Context,
@@ -76,6 +77,17 @@ internal class BetterPlayer(
     customDefaultLoadControl: CustomDefaultLoadControl?,
     result: MethodChannel.Result
 ) {
+        // YouTube headers
+    private const val YT_ANDROID_VR_USER_AGENT =
+            "com.google.android.apps.youtube.vr.oculus/1.56.21 (Linux; U; Android 12; Quest 3) gzip";
+    private const val YT_TV_USER_AGENT =
+            "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version,gzip(gfe)";
+     private const val YT_DEFAULT_USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.18 Safari/537.36";
+    private const val YT_COOKIE = "CONSENT=YES+cb";
+     private const val YT_ACCEPT =
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9";
+    private const val YT_ACCEPT_LANGUAGE = "en-US,en;q=0.5";
     private val exoPlayer: ExoPlayer?
     private val eventSink = QueuingEventSink()
     private val trackSelector: DefaultTrackSelector = DefaultTrackSelector(context)

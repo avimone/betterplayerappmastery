@@ -37,11 +37,7 @@ import androidx.annotation.RequiresApi
  * Android platform implementation of the VideoPlayerPlugin.
  */
 class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
-    private const val IS_YOUTUBE_PARAMETER = "isYouTube"
-    private const val YOUTUBE_AUDIO_URL_PARAMETER = "youTubeAudioUrl"
-    private const val YOUTUBE_FALLBACK_MUXED_URL_PARAMETER = "youTubeFallbackMuxedUrl"
-    private const val YOUTUBE_IS_HLS_PARAMETER = "youTubeIsHls"
-    private const val YOUTUBE_IS_MUXED_PARAMETER = "youTubeIsMuxed"
+
     private val videoPlayers = LongSparseArray<BetterPlayer>()
     private val dataSources = LongSparseArray<Map<String, Any?>>()
     private var flutterState: FlutterState? = null
@@ -247,6 +243,13 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         val key = getParameter(dataSource, KEY_PARAMETER, "")
         val headers: Map<String, String> = getParameter(dataSource, HEADERS_PARAMETER, HashMap())
         val overriddenDuration: Number = getParameter(dataSource, OVERRIDDEN_DURATION_PARAMETER, 0)
+        val isYouTube = getParameter(dataSource, IS_YOUTUBE_PARAMETER, false)
+        val youTubeAudioUrl = getParameter<String?>(dataSource, YOUTUBE_AUDIO_URL_PARAMETER, null)
+        val youTubeFallbackMuxedUrl =
+            getParameter<String?>(dataSource, YOUTUBE_FALLBACK_MUXED_URL_PARAMETER, null)
+        val youTubeIsHls = getParameter(dataSource, YOUTUBE_IS_HLS_PARAMETER, false)
+        val youTubeIsMuxed = getParameter(dataSource, YOUTUBE_IS_MUXED_PARAMETER, false)
+       
         if (dataSource[ASSET_PARAMETER] != null) {
             val asset = getParameter(dataSource, ASSET_PARAMETER, "")
             val assetLookupKey: String = if (dataSource[PACKAGE_PARAMETER] != null) {
@@ -271,7 +274,13 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                 0L,
                 overriddenDuration.toLong(),
                 null,
-                null, null, null
+                null, null, null,
+                // YouTube params
+                isYouTube = isYouTube,
+                youTubeAudioUrl = youTubeAudioUrl,
+                youTubeFallbackMuxedUrl = youTubeFallbackMuxedUrl,
+                youTubeIsHls = youTubeIsHls,
+                youTubeIsMuxed = youTubeIsMuxed
             )
         } else {
             val useCache = getParameter(dataSource, USE_CACHE_PARAMETER, false)
@@ -287,6 +296,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             val clearKey = getParameter<String?>(dataSource, DRM_CLEARKEY_PARAMETER, null)
             val drmHeaders: Map<String, String> =
                 getParameter(dataSource, DRM_HEADERS_PARAMETER, HashMap())
+
             player.setDataSource(
                 flutterState!!.applicationContext,
                 key,
@@ -301,7 +311,13 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                 licenseUrl,
                 drmHeaders,
                 cacheKey,
-                clearKey
+                clearKey,
+                    // YouTube params
+                isYouTube = isYouTube,
+                youTubeAudioUrl = youTubeAudioUrl,
+                youTubeFallbackMuxedUrl = youTubeFallbackMuxedUrl,
+                youTubeIsHls = youTubeIsHls,
+                youTubeIsMuxed = youTubeIsMuxed
             )
         }
     }
@@ -690,5 +706,10 @@ private fun stopPipHandler() {
         private const val DISPOSE_METHOD = "dispose"
         private const val PRE_CACHE_METHOD = "preCache"
         private const val STOP_PRE_CACHE_METHOD = "stopPreCache"
+        private const val IS_YOUTUBE_PARAMETER = "isYouTube"
+        private const val YOUTUBE_AUDIO_URL_PARAMETER = "youTubeAudioUrl"
+        private const val YOUTUBE_FALLBACK_MUXED_URL_PARAMETER = "youTubeFallbackMuxedUrl"
+        private const val YOUTUBE_IS_HLS_PARAMETER = "youTubeIsHls"
+        private const val YOUTUBE_IS_MUXED_PARAMETER = "youTubeIsMuxed"
     }
 }
