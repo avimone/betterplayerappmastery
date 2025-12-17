@@ -239,6 +239,11 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         player: BetterPlayer
     ) {
         val dataSource = call.argument<Map<String, Any?>>(DATA_SOURCE_PARAMETER)!!
+       // ✅ SUPER IMPORTANT: print the raw map received from Flutter
+        Log.d(TAG, "================= RAW dataSource MAP from Flutter =================")
+        Log.d(TAG, dataSource.toString())
+        Log.d(TAG, "====================================================================")
+
         dataSources.put(getTextureId(player)!!, dataSource)
         val key = getParameter(dataSource, KEY_PARAMETER, "")
         val headers: Map<String, String> = getParameter(dataSource, HEADERS_PARAMETER, HashMap())
@@ -249,7 +254,13 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             getParameter<String?>(dataSource, YOUTUBE_FALLBACK_MUXED_URL_PARAMETER, null)
         val youTubeIsHls = getParameter(dataSource, YOUTUBE_IS_HLS_PARAMETER, false)
         val youTubeIsMuxed = getParameter(dataSource, YOUTUBE_IS_MUXED_PARAMETER, false)
-       
+               // ✅ Log the parsed YouTube params (this tells you if the plugin receives them)
+        Log.d(TAG, "=== Parsed YouTube Params in BetterPlayerPlugin ===")
+        Log.d(TAG, "isYouTube=$isYouTube")
+        Log.d(TAG, "youTubeAudioUrl=$youTubeAudioUrl")
+        Log.d(TAG, "youTubeFallbackMuxedUrl=$youTubeFallbackMuxedUrl")
+        Log.d(TAG, "youTubeIsHls=$youTubeIsHls")
+        Log.d(TAG, "youTubeIsMuxed=$youTubeIsMuxed")
         if (dataSource[ASSET_PARAMETER] != null) {
             val asset = getParameter(dataSource, ASSET_PARAMETER, "")
             val assetLookupKey: String = if (dataSource[PACKAGE_PARAMETER] != null) {
