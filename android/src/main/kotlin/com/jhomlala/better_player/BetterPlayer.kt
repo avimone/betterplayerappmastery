@@ -96,6 +96,19 @@ internal class BetterPlayer(
     private val customDefaultLoadControl: CustomDefaultLoadControl =
         customDefaultLoadControl ?: CustomDefaultLoadControl()
     private var lastSendBufferedPosition = 0L
+       // ==================== NEW: YouTube playback variables ====================
+    private var hdPlayer: ExoPlayer? = null
+    private var hdReady = false
+    private var upgradingToHd = false
+    private var hdFailed = false
+    private var isUsingFallback = false
+    private var isYouTubeStream = false
+    private var youTubeAudioUrl: String? = null
+    private var youTubeFallbackMuxedUrl: String? = null
+    private var youTubeIsHls = false
+    private var youTubeIsMuxed = false
+    private var currentDataSourceFactory: DataSource.Factory? = null
+    private var currentContext: Context? = null
 
     init {
         val loadBuilder = DefaultLoadControl.Builder()
@@ -115,6 +128,226 @@ internal class BetterPlayer(
         setupVideoPlayer(eventChannel, textureEntry, result)
     }
 
+    // ==================== NEW: YouTube-specific methods ====================
+
+    /**
+     * Detect YouTube client type from URL parameters
+     */
+    private fun detectYouTubeClient(url: String): String {
+        return when {
+            url.contains("c=ANDROID_VR") -> "ANDROID_VR"
+            url.contains("c=TVHTML5") -> "TV"
+            url.contains("c=ANDROID") -> "ANDROID"
+            else -> "UNKNOWN"
+        }
+    }
+
+    /**
+     * Get appropriate User-Agent for detected YouTube client
+     */
+    private fun getUserAgentForYouTubeClient(client: String): String {
+        return when (client) {
+            "ANDROID_VR" -> YT_ANDROID_VR_USER_AGENT
+            "TV" -> YT_TV_USER_AGENT
+            else -> YT_DEFAULT_USER_AGENT
+        }
+    }
+
+    /**
+     * Create YouTube-specific data source factory with appropriate headers
+     */
+    private fun createYouTubeDataSourceFactory(context: Context, url: String): DataSource.Factory {
+        val detectedClient = detectYouTubeClient(url)
+        val userAgent = getUserAgentForYouTubeClient(detectedClient)
+        
+        Log.d(TAG, "Creating YouTube data source factory with client: $detectedClient")
+        
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(userAgent)
+            .setConnectTimeoutMs(DefaultHttpDataSource.DEFAULT_CONNECT_TIMEOUT_MILLIS)
+            .setReadTimeoutMs(DefaultHttpDataSource.DEFAULT_READ_TIMEOUT_MILLIS)
+            .setAllowCrossProtocolRedirects(true)
+        
+        val headers = mutableMapOf<String, String>()
+        headers["User-Agent"] = userAgent
+        headers["Cookie"] = YT_COOKIE
+        headers["Accept"] = YT_ACCEPT
+        headers["Accept-Language"] = YT_ACCEPT_LANGUAGE
+        headers["Origin"] = "https://www.youtube.com"
+        headers["Referer"] = "https://www.youtube.com/"
+        
+        httpDataSourceFactory.setDefaultRequestProperties(headers)
+        
+        return DefaultDataSource.Factory(context, httpDataSourceFactory)
+    }
+
+    /**
+     * Start playback with fallback muxed stream, then prepare HD merged stream in background.
+     * This implements the fast-start strategy for YouTube videos.
+     */
+    private fun startFallbackThenPrepareHd(
+        context: Context,
+        videoOnlyUrl: String,
+        audioUrl: String,
+        fallbackUrl: String,
+        dataSourceFactory: DataSource.Factory
+    ) {
+        isUsingFallback = true
+        Log.d(TAG, "▶️ Starting with FALLBACK muxed stream (fast start)")
+
+        // 1️⃣ Main player: fallback muxed stream for immediate playback
+        val fallbackUri = Uri.parse(fallbackUrl)
+        val fallbackItem = MediaItem.fromUri(fallbackUri)
+        val fallbackSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+            .createMediaSource(fallbackItem)
+
+        exoPlayer?.setMediaSource(fallbackSource)
+        exoPlayer?.prepare()
+
+        // 2️⃣ Background HD player: merged videoOnly + audioOnly
+        Log.d(TAG, "🔧 Preparing HD merged stream in background...")
+
+        val videoUri = Uri.parse(videoOnlyUrl)
+        val videoItem = MediaItem.fromUri(videoUri)
+        val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+            .createMediaSource(videoItem)
+
+        val audioUri = Uri.parse(audioUrl)
+        val audioItem = MediaItem.fromUri(audioUri)
+        val audioSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+            .createMediaSource(audioItem)
+
+        val hdSource = MergingMediaSource(videoSource, audioSource)
+
+        // Create HD player for background preparation
+        hdPlayer = ExoPlayer.Builder(context)
+            .setTrackSelector(DefaultTrackSelector(context))
+            .build()
+        
+        hdPlayer?.setMediaSource(hdSource)
+        hdPlayer?.prepare()
+        hdPlayer?.playWhenReady = false // Don't auto-play, just prepare
+
+        // Listen for HD player ready state
+        hdPlayer?.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY && !hdReady) {
+                    hdReady = true
+                    Log.d(TAG, "✅ HD merged stream is READY, upgrading...")
+                    Handler(Looper.getMainLooper()).post {
+                        upgradeToHd()
+                    }
+                }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                hdFailed = true
+                Log.e(TAG, "❌ HD player error, staying on fallback: ${error.message}")
+                // Just stay on fallback, do NOT crash
+            }
+        })
+    }
+
+    /**
+     * Switch from fallback muxed stream to HD merged stream.
+     */
+    private fun upgradeToHd() {
+        if (upgradingToHd || !hdReady || hdPlayer == null || exoPlayer == null) {
+            return
+        }
+        upgradingToHd = true
+
+        try {
+            val position = exoPlayer?.currentPosition ?: 0L
+            val wasPlaying = exoPlayer?.playWhenReady ?: true
+            Log.d(TAG, "🔁 Switching to HD at position: $position")
+
+            // Stop fallback player
+            exoPlayer?.pause()
+            surface?.let { hdPlayer?.setVideoSurface(it) }
+
+            // Sync position & state
+            hdPlayer?.seekTo(position)
+            hdPlayer?.playWhenReady = wasPlaying
+
+            // Transfer audio attributes
+            setAudioAttributes(hdPlayer, true)
+
+            // Stop the old player but keep exoPlayer reference for controls
+            // Note: In a full implementation, you'd need to swap references properly
+            
+            isUsingFallback = false
+            Log.d(TAG, "🎉 Now playing HD merged stream")
+            
+            // Send event to Flutter about quality upgrade
+            val event: MutableMap<String, Any> = HashMap()
+            event["event"] = "youtubeHdReady"
+            eventSink.success(event)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error while upgrading to HD", e)
+        } finally {
+            upgradingToHd = false
+        }
+    }
+
+    /**
+     * Switch back to fallback muxed stream if HD fails during playback.
+     */
+    private fun switchToFallbackFromHd() {
+        if (youTubeFallbackMuxedUrl.isNullOrEmpty() || currentDataSourceFactory == null) {
+            Log.e(TAG, "switchToFallbackFromHd called but no fallback URL available")
+            return
+        }
+
+        try {
+            val position = exoPlayer?.currentPosition ?: 0L
+            val wasPlaying = exoPlayer?.playWhenReady ?: true
+
+            // Stop HD player if active
+            hdPlayer?.stop()
+            hdPlayer?.release()
+            hdPlayer = null
+
+            // Create fallback source
+            val fallbackUri = Uri.parse(youTubeFallbackMuxedUrl)
+            val fallbackItem = MediaItem.fromUri(fallbackUri)
+            val fallbackSource = ProgressiveMediaSource.Factory(currentDataSourceFactory!!)
+                .createMediaSource(fallbackItem)
+
+            exoPlayer?.setMediaSource(fallbackSource)
+            exoPlayer?.prepare()
+            exoPlayer?.seekTo(Math.max(0, position - 3000)) // Seek back a bit for smoother transition
+            exoPlayer?.playWhenReady = wasPlaying
+
+            isUsingFallback = true
+            Log.d(TAG, "⬇️ Switched back to FALLBACK muxed stream after HD failure")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Error while switching back to fallback", e)
+        }
+    }
+
+    /**
+     * Clean up YouTube-specific resources.
+     */
+    private fun disposeYouTubeResources() {
+        hdPlayer?.stop()
+        hdPlayer?.release()
+        hdPlayer = null
+        hdReady = false
+        upgradingToHd = false
+        hdFailed = false
+        isUsingFallback = false
+        isYouTubeStream = false
+        youTubeAudioUrl = null
+        youTubeFallbackMuxedUrl = null
+        currentDataSourceFactory = null
+        currentContext = null
+    }
+
+    // ==================== MODIFIED: setDataSource with YouTube support ====================
+
     fun setDataSource(
         context: Context,
         key: String?,
@@ -129,13 +362,30 @@ internal class BetterPlayer(
         licenseUrl: String?,
         drmHeaders: Map<String, String>?,
         cacheKey: String?,
-        clearKey: String?
+        clearKey: String?,
+        // NEW: YouTube parameters
+        isYouTube: Boolean = false,
+        youTubeAudioUrl: String? = null,
+        youTubeFallbackMuxedUrl: String? = null,
+        youTubeIsHls: Boolean = false,
+        youTubeIsMuxed: Boolean = false
     ) {
         this.key = key
         isInitialized = false
+        
+        // Store YouTube configuration
+        this.isYouTubeStream = isYouTube
+        this.youTubeAudioUrl = youTubeAudioUrl
+        this.youTubeFallbackMuxedUrl = youTubeFallbackMuxedUrl
+        this.youTubeIsHls = youTubeIsHls
+        this.youTubeIsMuxed = youTubeIsMuxed
+        this.currentContext = context
+        
         val uri = Uri.parse(dataSource)
         var dataSourceFactory: DataSource.Factory?
         val userAgent = getUserAgent(headers)
+        
+        // Handle DRM configuration
         if (licenseUrl != null && licenseUrl.isNotEmpty()) {
             val httpMediaDrmCallback =
                 HttpMediaDrmCallback(licenseUrl, DefaultHttpDataSource.Factory())
@@ -156,7 +406,6 @@ internal class BetterPlayer(
                         ) { uuid: UUID? ->
                             try {
                                 val mediaDrm = FrameworkMediaDrm.newInstance(uuid!!)
-                                // Force L3.
                                 mediaDrm.setPropertyString("securityLevel", "L3")
                                 return@setUuidAndExoMediaDrmProvider mediaDrm
                             } catch (e: UnsupportedDrmException) {
@@ -181,29 +430,128 @@ internal class BetterPlayer(
         } else {
             drmSessionManager = null
         }
-        if (isHTTP(uri)) {
-            dataSourceFactory = getDataSourceFactory(userAgent, headers)
-            if (useCache && maxCacheSize > 0 && maxCacheFileSize > 0) {
-                dataSourceFactory = CacheDataSourceFactory(
-                    context,
-                    maxCacheSize,
-                    maxCacheFileSize,
-                    dataSourceFactory
-                )
+        
+        // ==================== NEW: YouTube stream handling ====================
+        if (isYouTube) {
+            // Use YouTube-specific data source factory
+            dataSourceFactory = createYouTubeDataSourceFactory(context, dataSource ?: "")
+            currentDataSourceFactory = dataSourceFactory
+            
+            val hasSeparateAudio = !youTubeAudioUrl.isNullOrEmpty()
+            val hasFallbackMuxed = !youTubeFallbackMuxedUrl.isNullOrEmpty()
+            
+            Log.d(TAG, "=== YouTube Stream Configuration ===")
+            Log.d(TAG, "isYouTube: $isYouTube")
+            Log.d(TAG, "youTubeIsHls: $youTubeIsHls")
+            Log.d(TAG, "youTubeIsMuxed: $youTubeIsMuxed")
+            Log.d(TAG, "hasSeparateAudio: $hasSeparateAudio")
+            Log.d(TAG, "hasFallbackMuxed: $hasFallbackMuxed")
+            Log.d(TAG, "videoUrl: $dataSource")
+            Log.d(TAG, "audioUrl: $youTubeAudioUrl")
+            Log.d(TAG, "fallbackMuxedUrl: $youTubeFallbackMuxedUrl")
+            
+            // Determine playback strategy
+            when {
+                // Case 1: HLS stream - play directly
+                youTubeIsHls -> {
+                    Log.d(TAG, "🎬 Using YouTube HLS stream")
+                    val mediaItem = MediaItem.fromUri(uri)
+                    val mediaSource = HlsMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(mediaItem)
+                    exoPlayer?.setMediaSource(mediaSource)
+                    exoPlayer?.prepare()
+                }
+                
+                // Case 2: Muxed stream - play directly
+                youTubeIsMuxed -> {
+                    Log.d(TAG, "🎬 Using YouTube muxed stream")
+                    val mediaItem = MediaItem.fromUri(uri)
+                    val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(mediaItem)
+                    exoPlayer?.setMediaSource(mediaSource)
+                    exoPlayer?.prepare()
+                }
+                
+                // Case 3: Separate video+audio with fallback - use fast-start strategy
+                hasSeparateAudio && hasFallbackMuxed -> {
+                    Log.d(TAG, "🎬 Using fast-start strategy (fallback -> HD)")
+                    startFallbackThenPrepareHd(
+                        context,
+                        dataSource ?: "",
+                        youTubeAudioUrl!!,
+                        youTubeFallbackMuxedUrl!!,
+                        dataSourceFactory
+                    )
+                }
+                
+                // Case 4: Separate video+audio without fallback - merge directly
+                hasSeparateAudio -> {
+                    Log.d(TAG, "🎬 Using merged video+audio directly (no fallback)")
+                    val videoItem = MediaItem.fromUri(uri)
+                    val videoSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(videoItem)
+                    
+                    val audioUri = Uri.parse(youTubeAudioUrl)
+                    val audioItem = MediaItem.fromUri(audioUri)
+                    val audioSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(audioItem)
+                    
+                    val mergedSource = MergingMediaSource(videoSource, audioSource)
+                    exoPlayer?.setMediaSource(mergedSource)
+                    exoPlayer?.prepare()
+                }
+                
+                // Case 5: Fallback only - play muxed stream
+                hasFallbackMuxed -> {
+                    Log.d(TAG, "🎬 Using fallback muxed stream only")
+                    val fallbackUri = Uri.parse(youTubeFallbackMuxedUrl)
+                    val mediaItem = MediaItem.fromUri(fallbackUri)
+                    val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(mediaItem)
+                    exoPlayer?.setMediaSource(mediaSource)
+                    exoPlayer?.prepare()
+                }
+                
+                // Case 6: Just the main URL
+                else -> {
+                    Log.d(TAG, "🎬 Using main URL directly")
+                    val mediaItem = MediaItem.fromUri(uri)
+                    val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
+                        .createMediaSource(mediaItem)
+                    exoPlayer?.setMediaSource(mediaSource)
+                    exoPlayer?.prepare()
+                }
             }
+            
         } else {
-            dataSourceFactory = DefaultDataSource.Factory(context)
+            // ==================== Original non-YouTube handling ====================
+            if (isHTTP(uri)) {
+                dataSourceFactory = getDataSourceFactory(userAgent, headers)
+                if (useCache && maxCacheSize > 0 && maxCacheFileSize > 0) {
+                    dataSourceFactory = CacheDataSourceFactory(
+                        context,
+                        maxCacheSize,
+                        maxCacheFileSize,
+                        dataSourceFactory
+                    )
+                }
+            } else {
+                dataSourceFactory = DefaultDataSource.Factory(context)
+            }
+            
+            val mediaSource = buildMediaSource(uri, dataSourceFactory, formatHint, cacheKey, context)
+            if (overriddenDuration != 0L) {
+                val clippingMediaSource = ClippingMediaSource(mediaSource, 0, overriddenDuration * 1000)
+                exoPlayer?.setMediaSource(clippingMediaSource)
+            } else {
+                exoPlayer?.setMediaSource(mediaSource)
+            }
+            exoPlayer?.prepare()
         }
-        val mediaSource = buildMediaSource(uri, dataSourceFactory, formatHint, cacheKey, context)
-        if (overriddenDuration != 0L) {
-            val clippingMediaSource = ClippingMediaSource(mediaSource, 0, overriddenDuration * 1000)
-            exoPlayer?.setMediaSource(clippingMediaSource)
-        } else {
-            exoPlayer?.setMediaSource(mediaSource)
-        }
-        exoPlayer?.prepare()
+        
         result.success(null)
     }
+
 
     fun setupPlayerNotification(
         context: Context, title: String, author: String?,

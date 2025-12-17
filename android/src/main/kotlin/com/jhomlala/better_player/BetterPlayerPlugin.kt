@@ -37,6 +37,11 @@ import androidx.annotation.RequiresApi
  * Android platform implementation of the VideoPlayerPlugin.
  */
 class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
+    private const val IS_YOUTUBE_PARAMETER = "isYouTube"
+    private const val YOUTUBE_AUDIO_URL_PARAMETER = "youTubeAudioUrl"
+    private const val YOUTUBE_FALLBACK_MUXED_URL_PARAMETER = "youTubeFallbackMuxedUrl"
+    private const val YOUTUBE_IS_HLS_PARAMETER = "youTubeIsHls"
+    private const val YOUTUBE_IS_MUXED_PARAMETER = "youTubeIsMuxed"
     private val videoPlayers = LongSparseArray<BetterPlayer>()
     private val dataSources = LongSparseArray<Map<String, Any?>>()
     private var flutterState: FlutterState? = null

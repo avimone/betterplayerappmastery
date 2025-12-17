@@ -189,6 +189,11 @@ class DataSource {
 
   /// The maximum size of each individual file in bytes.
   static const int _maxCacheFileSize = 10 * 1024 * 1024;
+  final bool isYouTube;
+  final String? youTubeAudioUrl;
+  final String? youTubeFallbackMuxedUrl;
+  final bool youTubeIsHls;
+  final bool youTubeIsMuxed;
 
   /// Constructs an instance of [DataSource].
   ///
@@ -227,6 +232,11 @@ class DataSource {
     this.activityName,
     this.clearKey,
     this.videoExtension,
+    this.isYouTube = false,
+    this.youTubeAudioUrl,
+    this.youTubeFallbackMuxedUrl,
+    this.youTubeIsHls = false,
+    this.youTubeIsMuxed = false,
   }) : assert(uri == null || asset == null);
 
   /// Describes the type of data source this [VideoPlayerController]

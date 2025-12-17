@@ -3,6 +3,7 @@ import 'package:better_player/src/configuration/better_player_data_source_type.d
 import 'package:better_player/src/configuration/better_player_drm_configuration.dart';
 import 'package:better_player/src/configuration/better_player_notification_configuration.dart';
 import 'package:better_player/src/configuration/better_player_video_format.dart';
+import 'package:better_player/src/configuration/better_player_youtube_configuration.dart';
 import 'package:better_player/src/subtitles/better_player_subtitles_source.dart';
 import 'package:flutter/widgets.dart';
 
@@ -76,30 +77,36 @@ class BetterPlayerDataSource {
   ///platform.
   final BetterPlayerBufferingConfiguration bufferingConfiguration;
 
-  BetterPlayerDataSource(
-    this.type,
-    this.url, {
-    this.bytes,
-    this.subtitles,
-    this.liveStream = false,
-    this.headers,
-    this.useAsmsSubtitles = true,
-    this.useAsmsTracks = true,
-    this.useAsmsAudioTracks = true,
-    this.asmsTrackNames,
-    this.resolutions,
-    this.cacheConfiguration,
-    this.notificationConfiguration =
-        const BetterPlayerNotificationConfiguration(
-      showNotification: false,
-    ),
-    this.overriddenDuration,
-    this.videoFormat,
-    this.videoExtension,
-    this.drmConfiguration,
-    this.placeholder,
-    this.bufferingConfiguration = const BetterPlayerBufferingConfiguration(),
-  }) : assert(
+  /// Configuration for YouTube playback
+  final BetterPlayerYouTubeConfiguration? youTubeConfiguration;
+
+  /// Flag indicating this is a YouTube stream
+  final bool isYouTube;
+
+  BetterPlayerDataSource(this.type, this.url,
+      {this.bytes,
+      this.subtitles,
+      this.liveStream = false,
+      this.headers,
+      this.useAsmsSubtitles = true,
+      this.useAsmsTracks = true,
+      this.useAsmsAudioTracks = true,
+      this.asmsTrackNames,
+      this.resolutions,
+      this.cacheConfiguration,
+      this.notificationConfiguration =
+          const BetterPlayerNotificationConfiguration(
+        showNotification: false,
+      ),
+      this.overriddenDuration,
+      this.videoFormat,
+      this.videoExtension,
+      this.drmConfiguration,
+      this.placeholder,
+      this.bufferingConfiguration = const BetterPlayerBufferingConfiguration(),
+      this.isYouTube = false,
+      this.youTubeConfiguration = const BetterPlayerYouTubeConfiguration()})
+      : assert(
             (type == BetterPlayerDataSourceType.network ||
                     type == BetterPlayerDataSourceType.file) ||
                 (type == BetterPlayerDataSourceType.memory &&
@@ -249,6 +256,29 @@ class BetterPlayerDataSource {
       placeholder: placeholder ?? this.placeholder,
       bufferingConfiguration:
           bufferingConfiguration ?? this.bufferingConfiguration,
+    );
+  }
+
+  /// Factory method for YouTube streams
+  factory BetterPlayerDataSource.youtube(
+    String videoOnlyUrl, {
+    required String audioOnlyUrl,
+    String? fallbackMuxedUrl,
+    bool isHls = false,
+    bool isMuxed = false,
+    // ... other parameters ...
+  }) {
+    return BetterPlayerDataSource(
+      BetterPlayerDataSourceType.network,
+      videoOnlyUrl,
+      isYouTube: true,
+      youTubeConfiguration: BetterPlayerYouTubeConfiguration(
+        videoOnlyUrl: videoOnlyUrl,
+        audioOnlyUrl: audioOnlyUrl,
+        fallbackMuxedUrl: fallbackMuxedUrl,
+        isHls: isHls,
+        isMuxed: isMuxed,
+      ),
     );
   }
 }

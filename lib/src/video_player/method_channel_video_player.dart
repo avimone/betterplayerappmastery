@@ -95,6 +95,11 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
           'activityName': dataSource.activityName,
           'clearKey': dataSource.clearKey,
           'videoExtension': dataSource.videoExtension,
+          'isYouTube': dataSource.isYouTube,
+          'youTubeAudioUrl': dataSource.youTubeAudioUrl,
+          'youTubeFallbackMuxedUrl': dataSource.youTubeFallbackMuxedUrl,
+          'youTubeIsHls': dataSource.youTubeIsHls,
+          'youTubeIsMuxed': dataSource.youTubeIsMuxed,
         };
         break;
       case DataSourceType.file:
