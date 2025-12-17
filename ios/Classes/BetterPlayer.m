@@ -42,21 +42,25 @@ AVPictureInPictureController *_pipController;
     __block NSError* aErr = nil;
 
     dispatch_group_enter(group);
-    [videoAsset loadValuesAsynchronouslyForKeys:@[@"tracks", @"duration"] completionHandler:^{
+    [videoAsset loadValuesAsynchronouslyForKeys:@[@"tracks", @"duration"] completionHandler:^ {
         NSError* err = nil;
         AVKeyValueStatus s1 = [videoAsset statusOfValueForKey:@"tracks" error:&err];
         if (s1 != AVKeyValueStatusLoaded) {
-            vErr = err ?: [NSError errorWithDomain:@"BetterPlayer" code:-100 userInfo:@{NSLocalizedDescriptionKey:@"Video tracks not loaded"}];
+            vErr = err ?: [NSError errorWithDomain:@"BetterPlayer"
+                                              code:-100
+                                          userInfo:@{NSLocalizedDescriptionKey:@"Video tracks not loaded"}];
         }
         dispatch_group_leave(group);
     }];
 
     dispatch_group_enter(group);
-    [audioAsset loadValuesAsynchronouslyForKeys:@[@"tracks", @"duration"] completionHandler:^{
+    [audioAsset loadValuesAsynchronouslyForKeys:@[@"tracks", @"duration"] completionHandler:^ {
         NSError* err = nil;
         AVKeyValueStatus s1 = [audioAsset statusOfValueForKey:@"tracks" error:&err];
         if (s1 != AVKeyValueStatusLoaded) {
-            aErr = err ?: [NSError errorWithDomain:@"BetterPlayer" code:-101 userInfo:@{NSLocalizedDescriptionKey:@"Audio tracks not loaded"}];
+            aErr = err ?: [NSError errorWithDomain:@"BetterPlayer"
+                                              code:-101
+                                          userInfo:@{NSLocalizedDescriptionKey:@"Audio tracks not loaded"}];
         }
         dispatch_group_leave(group);
     }];
@@ -74,7 +78,9 @@ AVPictureInPictureController *_pipController;
         AVAssetTrack* aTrack = [[audioAsset tracksWithMediaType:AVMediaTypeAudio] firstObject];
 
         if (!vTrack || !aTrack) {
-            completion(nil, [NSError errorWithDomain:@"BetterPlayer" code:-102 userInfo:@{NSLocalizedDescriptionKey:@"Missing video or audio track"}]);
+            completion(nil, [NSError errorWithDomain:@"BetterPlayer"
+                                               code:-102
+                                           userInfo:@{NSLocalizedDescriptionKey:@"Missing video or audio track"}]);
             return;
         }
 
@@ -84,7 +90,8 @@ AVPictureInPictureController *_pipController;
         if (CMTIME_IS_INVALID(duration) || CMTIME_IS_INDEFINITE(duration)) {
             duration = audioAsset.duration;
         }
-        if (CMTIME_IS_INVALID(duration) || CMTIME_IS_INDEFINITE(duration) || CMTIME_COMPARE_INLINE(duration, ==, kCMTimeZero)) {
+        if (CMTIME_IS_INVALID(duration) || CMTIME_IS_INDEFINITE(duration) ||
+            CMTIME_COMPARE_INLINE(duration, ==, kCMTimeZero)) {
             duration = videoAsset.duration;
         }
 
@@ -102,7 +109,7 @@ AVPictureInPictureController *_pipController;
         }
         compVideo.preferredTransform = vTrack.preferredTransform;
 
-        // Audio (m4a)
+        // Audio
         AVMutableCompositionTrack* compAudio =
         [mix addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
 
@@ -118,17 +125,21 @@ AVPictureInPictureController *_pipController;
     });
 }
 
-- (void)_bpReplaceCurrentItemPreservingState:(AVPlayerItem*)item seekTo:(CMTime)time {
+#pragma mark - ✅ FIXED: Switch to merged item using BetterPlayer pipeline + re-init
+
+- (void)_bpSwitchToMergedItemUsingBetterPlayerPipeline:(AVPlayerItem*)item
+                                              withKey:(NSString*)key
+                                               seekTo:(CMTime)time {
+    if (_disposed) return;
+
     BOOL wasPlaying = _isPlaying;
     double rate = _playerRate;
 
-    // Remove old observers safely
-    [self removeObservers];
+    // ✅ Force re-init so onReadyToPlay runs again for the new item
+    _isInitialized = false;
 
-    [_player replaceCurrentItemWithPlayerItem:item];
-
-    // Add observers for the new item
-    [self addObservers:item];
+    // ✅ Use existing BetterPlayer setup (adds observers + applies videoComposition/transform)
+    [self setDataSourcePlayerItem:item withKey:key];
 
     __weak BetterPlayer* weakSelf = self;
     [_player seekToTime:time toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero completionHandler:^(BOOL finished) {
@@ -179,18 +190,9 @@ AVPictureInPictureController *_pipController;
         [item addObserver:self forKeyPath:@"loadedTimeRanges" options:0 context:timeRangeContext];
         [item addObserver:self forKeyPath:@"status" options:0 context:statusContext];
         [item addObserver:self forKeyPath:@"presentationSize" options:0 context:presentationSizeContext];
-        [item addObserver:self
-               forKeyPath:@"playbackLikelyToKeepUp"
-                  options:0
-                  context:playbackLikelyToKeepUpContext];
-        [item addObserver:self
-               forKeyPath:@"playbackBufferEmpty"
-                  options:0
-                  context:playbackBufferEmptyContext];
-        [item addObserver:self
-               forKeyPath:@"playbackBufferFull"
-                  options:0
-                  context:playbackBufferFullContext];
+        [item addObserver:self forKeyPath:@"playbackLikelyToKeepUp" options:0 context:playbackLikelyToKeepUpContext];
+        [item addObserver:self forKeyPath:@"playbackBufferEmpty" options:0 context:playbackBufferEmptyContext];
+        [item addObserver:self forKeyPath:@"playbackBufferFull" options:0 context:playbackBufferFullContext];
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(itemDidPlayToEndTime:)
                                                      name:AVPlayerItemDidPlayToEndTimeNotification
@@ -223,18 +225,10 @@ AVPictureInPictureController *_pipController;
         [_player removeObserver:self forKeyPath:@"rate" context:nil];
         [[_player currentItem] removeObserver:self forKeyPath:@"status" context:statusContext];
         [[_player currentItem] removeObserver:self forKeyPath:@"presentationSize" context:presentationSizeContext];
-        [[_player currentItem] removeObserver:self
-                                   forKeyPath:@"loadedTimeRanges"
-                                      context:timeRangeContext];
-        [[_player currentItem] removeObserver:self
-                                   forKeyPath:@"playbackLikelyToKeepUp"
-                                      context:playbackLikelyToKeepUpContext];
-        [[_player currentItem] removeObserver:self
-                                   forKeyPath:@"playbackBufferEmpty"
-                                      context:playbackBufferEmptyContext];
-        [[_player currentItem] removeObserver:self
-                                   forKeyPath:@"playbackBufferFull"
-                                      context:playbackBufferFullContext];
+        [[_player currentItem] removeObserver:self forKeyPath:@"loadedTimeRanges" context:timeRangeContext];
+        [[_player currentItem] removeObserver:self forKeyPath:@"playbackLikelyToKeepUp" context:playbackLikelyToKeepUpContext];
+        [[_player currentItem] removeObserver:self forKeyPath:@"playbackBufferEmpty" context:playbackBufferEmptyContext];
+        [[_player currentItem] removeObserver:self forKeyPath:@"playbackBufferFull" context:playbackBufferFullContext];
         [[NSNotificationCenter defaultCenter] removeObserver:self];
         self._observersAdded = false;
     }
@@ -248,19 +242,15 @@ AVPictureInPictureController *_pipController;
         if (_eventSink) {
             _eventSink(@{@"event" : @"completed", @"key" : _key});
             [ self removeObservers];
-
         }
     }
 }
 
 static inline CGFloat radiansToDegrees(CGFloat radians) {
-    // Input range [-pi, pi] or [-180, 180]
     CGFloat degrees = GLKMathRadiansToDegrees((float)radians);
     if (degrees < 0) {
-        // Convert -90 to 270 and -180 to 180
         return degrees + 360;
     }
-    // Output degrees in between [0, 360[
     return degrees;
 };
 
@@ -271,15 +261,13 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     [AVMutableVideoCompositionInstruction videoCompositionInstruction];
     instruction.timeRange = CMTimeRangeMake(kCMTimeZero, [asset duration]);
     AVMutableVideoCompositionLayerInstruction* layerInstruction =
-    [AVMutableVideoCompositionLayerInstruction
-     videoCompositionLayerInstructionWithAssetTrack:videoTrack];
+    [AVMutableVideoCompositionLayerInstruction videoCompositionLayerInstructionWithAssetTrack:videoTrack];
     [layerInstruction setTransform:_preferredTransform atTime:kCMTimeZero];
 
     AVMutableVideoComposition* videoComposition = [AVMutableVideoComposition videoComposition];
     instruction.layerInstructions = @[ layerInstruction ];
     videoComposition.instructions = @[ instruction ];
 
-    // If in portrait mode, switch the width and height of the video
     CGFloat width = videoTrack.naturalSize.width;
     CGFloat height = videoTrack.naturalSize.height;
     NSInteger rotationDegrees =
@@ -318,7 +306,16 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
 - (void)setDataSourceAsset:(NSString*)asset withKey:(NSString*)key withCertificateUrl:(NSString*)certificateUrl withLicenseUrl:(NSString*)licenseUrl cacheKey:(NSString*)cacheKey cacheManager:(CacheManager*)cacheManager overriddenDuration:(int) overriddenDuration{
     NSString* path = [[NSBundle mainBundle] pathForResource:asset ofType:nil];
-    return [self setDataSourceURL:[NSURL fileURLWithPath:path] withKey:key withCertificateUrl:certificateUrl withLicenseUrl:(NSString*)licenseUrl withHeaders: @{} withCache: false cacheKey:cacheKey cacheManager:cacheManager overriddenDuration:overriddenDuration videoExtension: nil];
+    return [self setDataSourceURL:[NSURL fileURLWithPath:path]
+                          withKey:key
+               withCertificateUrl:certificateUrl
+                   withLicenseUrl:(NSString*)licenseUrl
+                      withHeaders:@{}
+                        withCache:false
+                         cacheKey:cacheKey
+                     cacheManager:cacheManager
+              overriddenDuration:overriddenDuration
+                 videoExtension:nil];
 }
 
 #pragma mark - ✅ Existing method remains, now forwards to new method with isYouTube:NO
@@ -334,7 +331,6 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
      overriddenDuration:(int)overriddenDuration
         videoExtension:(NSString*)videoExtension {
 
-    // ✅ Normal playback stays EXACTLY the same (YouTube disabled)
     [self setDataSourceURL:url
                    withKey:key
         withCertificateUrl:certificateUrl
@@ -375,7 +371,6 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
         headers = @{};
     }
 
-    // ✅ If NOT YouTube, run EXACT old logic (NO change)
     if (!isYouTube) {
         AVPlayerItem* item;
         if (useCache){
@@ -388,8 +383,7 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 
             item = [cacheManager getCachingPlayerItemForNormalPlayback:url cacheKey:cacheKey videoExtension: videoExtension headers:headers];
         } else {
-            AVURLAsset* asset = [AVURLAsset URLAssetWithURL:url
-                                                    options:@{@"AVURLAssetHTTPHeaderFieldsKey" : headers}];
+            AVURLAsset* asset = [AVURLAsset URLAssetWithURL:url options:@{@"AVURLAssetHTTPHeaderFieldsKey" : headers}];
             if (certificateUrl && certificateUrl != [NSNull null] && [certificateUrl length] > 0) {
                 NSURL * certificateNSURL = [[NSURL alloc] initWithString: certificateUrl];
                 NSURL * licenseNSURL = [[NSURL alloc] initWithString: licenseUrl];
@@ -453,7 +447,9 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
             }
 
             CMTime current = strongSelf->_player.currentTime;
-            [strongSelf _bpReplaceCurrentItemPreservingState:item seekTo:current];
+
+            // ✅ FIX: switch using BetterPlayer pipeline + force re-init
+            [strongSelf _bpSwitchToMergedItemUsingBetterPlayerPipeline:item withKey:key seekTo:current];
 
             if (strongSelf->_eventSink) {
                 strongSelf->_eventSink(@{@"event" : @"youtubeHdReady", @"key" : strongSelf->_key ?: @""});
@@ -505,6 +501,8 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     return [self setDataSourcePlayerItem:item withKey:key];
 }
 
+#pragma mark - Existing setDataSourcePlayerItem (unchanged)
+
 - (void)setDataSourcePlayerItem:(AVPlayerItem*)item withKey:(NSString*)key{
     _key = key;
     _stalledCount = 0;
@@ -520,8 +518,7 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
                 AVAssetTrack* videoTrack = tracks[0];
                 void (^trackCompletionHandler)(void) = ^{
                     if (self->_disposed) return;
-                    if ([videoTrack statusOfValueForKey:@"preferredTransform"
-                                                  error:nil] == AVKeyValueStatusLoaded) {
+                    if ([videoTrack statusOfValueForKey:@"preferredTransform" error:nil] == AVKeyValueStatusLoaded) {
                         self->_preferredTransform = [self fixTransform:videoTrack];
                         AVMutableVideoComposition* videoComposition =
                         [self getVideoCompositionWithTransform:self->_preferredTransform
@@ -539,6 +536,7 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     [asset loadValuesAsynchronouslyForKeys:@[ @"tracks" ] completionHandler:assetCompletionHandler];
     [self addObservers:item];
 }
+
 
 -(void)handleStalled {
     if (_isStalledCheckStarted){
