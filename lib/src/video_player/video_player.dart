@@ -336,6 +336,12 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     String? activityName,
     String? clearKey,
     String? videoExtension,
+    // ✅ NEW: YouTube params
+    bool isYouTube = false,
+    String? youTubeAudioUrl,
+    String? youTubeFallbackMuxedUrl,
+    bool youTubeIsHls = false,
+    bool youTubeIsMuxed = false,
   }) {
     return _setDataSource(
       DataSource(
@@ -359,6 +365,12 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
         activityName: activityName,
         clearKey: clearKey,
         videoExtension: videoExtension,
+        // ✅ forward YouTube params into the platform DataSource
+        isYouTube: isYouTube,
+        youTubeAudioUrl: youTubeAudioUrl,
+        youTubeFallbackMuxedUrl: youTubeFallbackMuxedUrl,
+        youTubeIsHls: youTubeIsHls,
+        youTubeIsMuxed: youTubeIsMuxed,
       ),
     );
   }

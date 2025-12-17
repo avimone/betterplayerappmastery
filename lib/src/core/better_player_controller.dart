@@ -476,6 +476,16 @@ class BetterPlayerController {
               _betterPlayerDataSource?.notificationConfiguration?.activityName,
           clearKey: _betterPlayerDataSource?.drmConfiguration?.clearKey,
           videoExtension: _betterPlayerDataSource!.videoExtension,
+          // ===== YouTube-specific parameters =====
+          isYouTube: _betterPlayerDataSource?.youTubeConfiguration != null,
+          youTubeAudioUrl:
+              _betterPlayerDataSource?.youTubeConfiguration?.audioOnlyUrl,
+          youTubeFallbackMuxedUrl:
+              _betterPlayerDataSource?.youTubeConfiguration?.fallbackMuxedUrl,
+          youTubeIsHls:
+              _betterPlayerDataSource?.youTubeConfiguration?.isHls ?? false,
+          youTubeIsMuxed:
+              _betterPlayerDataSource?.youTubeConfiguration?.isMuxed ?? false,
         );
 
         break;
