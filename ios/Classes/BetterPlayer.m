@@ -131,7 +131,11 @@ AVPictureInPictureController *_pipController;
                                               withKey:(NSString*)key
                                                seekTo:(CMTime)time {
     if (_disposed) return;
-
+NSLog(@"🔁 [YT] SWITCH start -> merged. key=%@ seekTo=%.3f wasPlaying=%d rate=%.2f",
+      key,
+      CMTimeGetSeconds(time),
+      _isPlaying,
+      _playerRate);
     BOOL wasPlaying = _isPlaying;
     double rate = _playerRate;
 
@@ -140,6 +144,7 @@ AVPictureInPictureController *_pipController;
 
     // ✅ Use existing BetterPlayer setup (adds observers + applies videoComposition/transform)
     [self setDataSourcePlayerItem:item withKey:key];
+NSLog(@"🔁 [YT] SWITCH applied new item via setDataSourcePlayerItem. key=%@", key);
 
     __weak BetterPlayer* weakSelf = self;
     [_player seekToTime:time toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero completionHandler:^(BOOL finished) {
@@ -430,6 +435,8 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
         if (@available(iOS 10.0, *) && overriddenDuration > 0) {
             _overriddenDuration = overriddenDuration;
         }
+        NSLog(@"✅ [YT] Starting FALLBACK muxed playback. key=%@ fallbackUrl=%@",
+        key, youTubeFallbackMuxedUrl);
 
         // Start fallback now
         [self setDataSourcePlayerItem:fallbackItem withKey:key];
@@ -445,6 +452,11 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
                 // Stay on fallback (do not break existing playback)
                 return;
             }
+NSLog(@"✅ [YT] HD merged item READY. Switching now. key=%@ currentTime=%.3f videoUrl=%@ audioUrl=%@",
+      key,
+      CMTimeGetSeconds(strongSelf->_player.currentTime),
+      url.absoluteString,
+      youTubeAudioUrl);
 
             CMTime current = strongSelf->_player.currentTime;
 
