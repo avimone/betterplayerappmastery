@@ -72,6 +72,9 @@ class BetterPlayerControlsConfiguration {
   ///Icon of unmute
   final IconData unMuteIcon;
 
+  ///SVG of custombutton
+  final Widget customButtonIcon;
+
   ///Icon of fullscreen mode enable
   final IconData fullscreenEnableIcon;
 
@@ -89,6 +92,9 @@ class BetterPlayerControlsConfiguration {
 
   ///Flag used to enable/disable mute
   final bool enableMute;
+
+  ///Flag used to enable/disable Custom Button
+  final bool enableCustomButton;
 
   ///Flag used to enable/disable progress texts
   final bool enableProgressText;
@@ -226,6 +232,7 @@ class BetterPlayerControlsConfiguration {
     this.skipForwardIcon = Icons.forward_10_outlined,
     this.enableFullscreen = true,
     this.enableMute = true,
+    this.enableCustomButton = false,
     this.enableProgressText = true,
     this.enableProgressBar = true,
     this.enableProgressBarDrag = true,
@@ -257,6 +264,11 @@ class BetterPlayerControlsConfiguration {
     this.enablePip = true,
     this.enableRetry = true,
     this.overflowMenuCustomItems = const [],
+    this.customButtonIcon = const Icon(
+      Icons.abc,
+      size: 24.0,
+      color: Colors.white,
+    ),
     this.overflowMenuIcon = Icons.more_vert_outlined,
     this.pipMenuIcon = Icons.picture_in_picture_outlined,
     this.playbackSpeedIcon = Icons.shutter_speed_outlined,

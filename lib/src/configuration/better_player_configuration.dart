@@ -120,6 +120,8 @@ class BetterPlayerConfiguration {
 
   final Function? pip;
 
+  final Function? customButtonOnTap;
+
   /// Custom download widget to be displayed in the controls overlay
   final Widget? downloadWidget;
 
@@ -149,6 +151,7 @@ class BetterPlayerConfiguration {
     this.allowedScreenSleep = true,
     this.fullScreenAspectRatio,
     this.pip,
+    this.customButtonOnTap,
     this.downloadWidget,
     this.downloadFunction,
     this.downloadButtonPosition = DownloadButtonPosition.topRight,
@@ -246,6 +249,7 @@ class BetterPlayerConfiguration {
           controlsConfiguration ?? this.controlsConfiguration,
       fit: fit ?? this.fit,
       pip: pip ?? this.pip,
+      customButtonOnTap: customButtonOnTap ?? this.customButtonOnTap,
       rotation: rotation ?? this.rotation,
       playerVisibilityChangedBehavior: playerVisibilityChangedBehavior ??
           this.playerVisibilityChangedBehavior,

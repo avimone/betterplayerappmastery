@@ -500,6 +500,11 @@ class _BetterPlayerMaterialControlsState
                   else
                     const SizedBox(),
 
+                  if (_controlsConfiguration.enableCustomButton)
+                    _buildMuteButton(_controller)
+                  else
+                    const SizedBox(),
+
                   if (config.downloadButtonPosition ==
                       DownloadButtonPosition.bottomRight)
                     _buildDownloadWidget(),
@@ -722,13 +727,12 @@ class _BetterPlayerMaterialControlsState
   ) {
     return BetterPlayerMaterialClickableWidget(
       onTap: () {
-        cancelAndRestartTimer();
-        if (_latestValue!.volume == 0) {
-          _betterPlayerController!.setVolume(_latestVolume ?? 0.5);
-        } else {
-          _latestVolume = controller!.value.volume;
-          _betterPlayerController!.setVolume(0.0);
+        if (betterPlayerController
+                ?.betterPlayerConfiguration.customButtonOnTap ==
+            null) {
+          return;
         }
+        betterPlayerController?.betterPlayerConfiguration.customButtonOnTap!();
       },
       child: AnimatedOpacity(
         opacity: controlsNotVisible ? 0.0 : 1.0,
@@ -737,13 +741,7 @@ class _BetterPlayerMaterialControlsState
           child: Container(
             height: _controlsConfiguration.controlBarHeight,
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Icon(
-              (_latestValue != null && _latestValue!.volume > 0)
-                  ? _controlsConfiguration.muteIcon
-                  : _controlsConfiguration.unMuteIcon,
-              color: _controlsConfiguration.iconsColor,
-              size: _controlsConfiguration.iconSize,
-            ),
+            child: _controlsConfiguration.customButtonIcon,
           ),
         ),
       ),
