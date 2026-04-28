@@ -501,7 +501,7 @@ class _BetterPlayerMaterialControlsState
                     const SizedBox(),
 
                   if (_controlsConfiguration.enableCustomButton)
-                    _buildMuteButton(_controller)
+                    _buildCustomButtonButton(_controller)
                   else
                     const SizedBox(),
 
@@ -723,6 +723,39 @@ class _BetterPlayerMaterialControlsState
   }
 
   Widget _buildMuteButton(
+    VideoPlayerController? controller,
+  ) {
+    return BetterPlayerMaterialClickableWidget(
+      onTap: () {
+        cancelAndRestartTimer();
+        if (_latestValue!.volume == 0) {
+          _betterPlayerController!.setVolume(_latestVolume ?? 0.5);
+        } else {
+          _latestVolume = controller!.value.volume;
+          _betterPlayerController!.setVolume(0.0);
+        }
+      },
+      child: AnimatedOpacity(
+        opacity: controlsNotVisible ? 0.0 : 1.0,
+        duration: _controlsConfiguration.controlsHideTime,
+        child: ClipRect(
+          child: Container(
+            height: _controlsConfiguration.controlBarHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Icon(
+              (_latestValue != null && _latestValue!.volume > 0)
+                  ? _controlsConfiguration.muteIcon
+                  : _controlsConfiguration.unMuteIcon,
+              color: _controlsConfiguration.iconsColor,
+              size: _controlsConfiguration.iconSize,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCustomButtonButton(
     VideoPlayerController? controller,
   ) {
     return BetterPlayerMaterialClickableWidget(
