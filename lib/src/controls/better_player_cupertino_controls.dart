@@ -370,6 +370,50 @@ class _BetterPlayerCupertinoControlsState
     );
   }
 
+  /// Custom button - mirrors Material controls' _buildCustomButtonButton.
+  /// Wired through _controlsConfiguration.enableCustomButton +
+  /// _controlsConfiguration.customButtonIcon +
+  /// betterPlayerConfiguration.customButtonOnTap.
+  GestureDetector _buildCustomButton(
+    Color backgroundColor,
+    Color iconColor,
+    double barHeight,
+    double iconSize,
+    double buttonPadding,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        if (betterPlayerController
+                ?.betterPlayerConfiguration.customButtonOnTap ==
+            null) {
+          return;
+        }
+        betterPlayerController?.betterPlayerConfiguration.customButtonOnTap!();
+      },
+      child: AnimatedOpacity(
+        opacity: controlsNotVisible ? 0.0 : 1.0,
+        duration: _controlsConfiguration.controlsHideTime,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10.0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: backgroundColor,
+            ),
+            child: Container(
+              height: barHeight,
+              padding: EdgeInsets.symmetric(
+                horizontal: buttonPadding,
+              ),
+              child: Center(
+                child: _controlsConfiguration.customButtonIcon,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   GestureDetector _buildPlayPause(
     VideoPlayerController controller,
     Color iconColor,
@@ -627,6 +671,18 @@ class _BetterPlayerCupertinoControlsState
           if (_controlsConfiguration.enableMute)
             _buildMuteButton(
               _controller,
+              backgroundColor,
+              iconColor,
+              barHeight,
+              iconSize,
+              buttonPadding,
+            )
+          else
+            const SizedBox(),
+          const SizedBox(width: 4),
+
+          if (_controlsConfiguration.enableCustomButton)
+            _buildCustomButton(
               backgroundColor,
               iconColor,
               barHeight,
